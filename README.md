@@ -1,18 +1,18 @@
 <div align="center">
-<h1>Nimbus Internet Blocker</h1>
+<h1>Nimbus DNS Blocker</h1>
 </div>
 
 > **Your journey to digital wellness begins with small, mindful steps. Block distractions and cultivate presence.**
 
 A modern .NET MAUI desktop application that helps users take control of their digital habits by blocking distracting websites at the system level.
 
-(Nimbus Showcase GIF)
+![gif](https://github.com/mbonnic-psx/Nimbus-Internet-Blocker/blob/master/Nimbus%20SS/Nimbus%20Showcase%20Gif.gif)
 
 ---
 
 ## ☁️ Purpose
 
-Nimbus Internet Blocker is a desktop application used to provide users with an easy way to remove distracting websites from the internet. As the internet becomes more ingrained in our life we use it every day and sometimes we need a break. If you are someone dealing with compulsivity problems or sometimes there is just too much going on this app is something that can help you.
+Nimbus DNS Blocker is a desktop application used to provide users with an easy way to remove distracting websites from the internet. As the internet becomes more ingrained in our life we use it every day and sometimes we need a break. If you are someone dealing with compulsivity problems or sometimes there is just too much going on this app is something that can help you.
 
 ### Use Cases
 - **Personal Productivity**: Block social media and entertainment sites during work/study hours
@@ -52,9 +52,14 @@ Nimbus Internet Blocker is a desktop application used to provide users with an e
 
 ## ⛈️ Screenshots
 
-(Showcase)
+![dashboard](https://github.com/mbonnic-psx/Nimbus-Internet-Blocker/blob/master/Nimbus%20SS/Nimbus%20Dashboard.png)
+> Main Dashboard is where you will see the quote of the day and usage statistics
 
-(Showcase)
+![blocking](https://github.com/mbonnic-psx/Nimbus-Internet-Blocker/blob/master/Nimbus%20SS/Nimbus%20Blocking.png)
+> Blocking page is where you will block domains by based on category or custom website you input
+
+![setting](https://github.com/mbonnic-psx/Nimbus-Internet-Blocker/blob/master/Nimbus%20SS/Nimbus%20Setting.png)
+> Setting page is where you will set password and or restore old/default host file 
 
 --- 
 
@@ -80,7 +85,7 @@ Nimbus is a **local-first** desktop application, it keeps all configurations on 
 
 ### Password Protection 
 
-Nimbus Internet Blocker is adding an optional **Passwork Lock** so that once blocking rules are applied, you must enter a password to:
+Nimbus DNS Blocker is adding an optional **Passwork Lock** so that once blocking rules are applied, you must enter a password to:
 - Enable categories / add custom sites
 - Disable categories / remove custom sites
 - Restore the hosts file from a backup
@@ -169,14 +174,14 @@ This app will include 9 pre-configured categories:
 
 ### How It Works
 
-1. Open **Nimbus Internet Blocker**
+1. Open **Nimbus DNS Blocker**
 2. Navigate to **Blocking** page
 3. Toggle the switch for whichever category
 4. Add any custom sites to block
 5. Click save at the bottom
 6. Blocking will take effect 
 
-Nimbus Internet Blocker modifies the Windows hosts file to redirect blocked domains to `0.0.0.0`:
+Nimbus DNS Blocker modifies the Windows hosts file to redirect blocked domains to `0.0.0.0`:
 
 ```
 # Normal hosts file
@@ -318,7 +323,7 @@ public class PresetEntry
 
 <div align="center">
 
->"The seeds I plant yesterday shapes the plant that grows today - Anonymous"
+>"If you feel like you are losing everything remember, trees lose their leaves every year, yet they stand tall and wait for better days to come - Anonymous"
 
 [⬆ Back to Top](#nimbus-dns-blocker)
 
