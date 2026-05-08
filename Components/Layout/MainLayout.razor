@@ -1,0 +1,34 @@
+﻿@inherits LayoutComponentBase
+@using Nimbus_Internet_Blocker.Shared
+@inject ISnackbarService Snack
+@inject IJSRuntime JS
+
+<div class="app-shell">
+    <!-- Subtle rain overlay behind UI -->
+    <canvas id="rain-canvas" class="rain-canvas" aria-hidden="true"></canvas>
+
+    <NavMenu />
+
+    <main class="content">
+        @Body
+    </main>
+
+    <!-- Toast/snackbar overlay -->
+    <SnackbarHost />
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // re-render layout when snack messages change
+        Snack.OnChange += StateHasChanged;
+
+        // Only run rain overlay on Windows/macOS (desktop)
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacCatalyst())
+        {
+            await JS.InvokeVoidAsync("nimbusRain.start", "rain-canvas");
+        }
+    }
+}

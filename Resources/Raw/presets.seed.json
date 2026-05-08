@@ -1,0 +1,363 @@
+{
+  "exclude": [
+    "**/bin",
+    "**/bower_components",
+    "**/jspm_packages",
+    "**/node_modules",
+    "**/obj",
+    "**/platforms"
+  ],
+
+  "categories": {
+    "Adult": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "pornhub.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "xvideos.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "xnxx.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "xhamster.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "onlyfans.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "redtube.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "AI": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "grok.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "chatgpt.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "chat.openai.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "claude.ai",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "gemini.google.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "copilot.microsoft.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "perplexity.ai",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Gambling": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "draftkings.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "fanduel.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "bet365.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "pokerstars.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "bovada.lv",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "betmgm.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Gaming": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "coolmathgames.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "miniclip.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "poki.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "roblox.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "kongregate.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "addictinggames.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Messenger": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "telegram.org",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "discord.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "slack.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "whatsapp.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "signal.org",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "messenger.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "News": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "cnn.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "foxnews.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "bbc.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "reddit.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "nytimes.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "theguardian.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "huffpost.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Shopping": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "amazon.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "ebay.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "etsy.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "walmart.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "target.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "aliexpress.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "shein.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Social": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "facebook.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "instagram.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "tiktok.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "x.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "twitter.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "snapchat.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "pinterest.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "linkedin.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "tumblr.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    },
+    "Streaming": {
+      "enabled": false,
+      "entries": [
+        {
+          "host": "youtube.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "netflix.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "twitch.tv",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "hulu.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "disneyplus.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "primevideo.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        },
+        {
+          "host": "peacocktv.com",
+          "ipv4": "0.0.0.0",
+          "ipv6": "::"
+        }
+      ]
+    }
+  }
+}

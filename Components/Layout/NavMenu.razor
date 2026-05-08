@@ -1,0 +1,44 @@
+﻿@* Single-item sidebar nav (no routing) *@
+@using Nimbus_Internet_Blocker.Shared
+
+<aside class="sidebar">
+    <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+            <!-- simple cloud icon -->
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M7.5 16h9a3.8 3.8 0 0 0 .4-7.6A5 5 0 0 0 7.4 10.1 3.2 3.2 0 0 0 7.5 16Z"
+                      stroke="currentColor" stroke-width="1.6"
+                      stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </div>
+
+        <div class="brand-text">
+            <div class="brand-title">Nimbus DNS Blocker</div>
+            <div class="brand-subtitle">Digital Wellness</div>
+        </div>
+    </div>
+
+    <div class="nav">
+        <NavLink class="nav-btn" ActiveClass="active" href="/" Match="NavLinkMatch.All">
+            <span class="nav-text">Dashboard</span>
+        </NavLink>
+
+        <NavLink class="nav-btn" ActiveClass="active" href="/blocking">
+            <span class="nav-text">Blocking</span>
+        </NavLink>
+
+        <NavLink class="nav-btn" ActiveClass="active" href="/settings">
+            <span class="nav-text">Settings</span>
+        </NavLink>
+    </div>
+
+
+
+
+    <div class="sidebar-footer">
+        <div class="hint">
+            Hosts changes are applied only inside the
+            <span class="mono">Nimbus-managed</span> section.
+        </div>
+    </div>
+</aside>

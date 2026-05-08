@@ -1,0 +1,220 @@
+﻿@page "/blocking"
+@using Nimbus_Internet_Blocker.Models
+@inject PresetService PresetService
+@inject CustomSitesService CustomSitesService
+@inject IHostsFileService HostsFileService
+
+<div class="blocking-page">
+    <!-- Page header (like Home) -->
+    <div class="hero">
+        <h1 class="h1">Blocking</h1>
+        <p class="subhead">
+            Turn categories on/off, or add custom sites to block.
+        </p>
+    </div>
+
+    <!-- Two cards, side-by-side -->
+    <div class="blocking-grid">
+        <!-- LEFT: Categories -->
+        <section class="card card-pad blocking-card">
+            <div class="card-top">
+                <div>
+                    <h2 class="section-title">Categories</h2>
+                    <div class="muted">Loaded @_categoryCount categories</div>
+                </div>
+            </div>
+
+            <div class="category-list">
+                @if (_presets?.Categories != null)
+                {
+                    @foreach (var keyValuePair in _presets.Categories)
+                    {
+                        var name = keyValuePair.Key;
+                        var cat = keyValuePair.Value;
+
+                        <div class="category-row">
+                            <div class="category-name">@name</div>
+
+                            <label class="switch" title="Enable/disable category">
+                                <input type="checkbox"
+                                       checked="@cat.Enabled"
+                                       @onchange="async _ => await OnCategoryChangedAsync(name)" />
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    }
+                }
+            </div>
+        </section>
+
+        <!-- RIGHT: Custom -->
+        <section class="card card-pad blocking-card">
+            <div class="card-top">
+                <div>
+                    <h2 class="section-title">Custom Sites</h2>
+                    <div class="muted">Add your own domains to block.</div>
+                </div>
+
+                <button class="btn btn-ghost"
+                        type="button"
+                        @onclick="() => _customOpen = !_customOpen">
+                    List (@(_customRoot?.Sites?.Count ?? 0))
+                </button>
+            </div>
+
+            <div class="custom-add">
+                <input class="input"
+                       placeholder="example.com"
+                       @bind="_customInput"
+                       @bind:event="oninput"
+                       @onkeydown="OnCustomInputKeyDown" />
+
+                <button class="btn btn-primary"
+                        type="button"
+                        @onclick="AddCustomAsync">
+                    Add
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_customMessage))
+            {
+                <div class="dim" style="margin-top:10px;">
+                    @_customMessage
+                </div>
+            }
+
+            @if (_customOpen)
+            {
+                <div class="custom-dropdown">
+                    @if (_customRoot == null || _customRoot.Sites.Count == 0)
+                    {
+                        <div class="placeholder">No custom sites yet.</div>
+                    }
+                    else
+                    {
+                        @foreach (var site in _customRoot.Sites)
+                        {
+                            <div class="entry-pill" style="margin-bottom:10px;">
+                                <div class="entry-host">@site.Host</div>
+
+                                <label class="switch" title="Enable/disable site">
+                                    <input type="checkbox"
+                                           checked="@(site.Enabled ?? true)"
+                                           @onchange="async e => await ToggleCustomEnabledAsync(site, e)" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </section>
+    </div>
+
+    <!-- Elevation warning -->
+    @if (!HostsFileService.IsElevated)
+    {
+        <div class="apply-row">
+            <div class="admin-warning">
+                ⚠ Nimbus is not running as Administrator — blocking rules cannot be applied.
+                Right-click the app and choose <strong>Run as administrator</strong>.
+            </div>
+        </div>
+    }
+
+    <!-- Apply button -->
+    <div class="apply-row">
+        <button class="btn btn-primary apply-btn"
+                type="button"
+                disabled="@(_isApplying || !HostsFileService.IsElevated)"
+                @onclick="ApplyBlockingAsync">
+            @if (_isApplying)
+            {
+                <span>Applying…</span>
+            }
+            else
+            {
+                <span>Apply Blocking Rules</span>
+            }
+        </button>
+    </div>
+</div>
+
+@code {
+    private PresetsRoot? _presets;
+    private int _categoryCount;
+
+    private CustomsRoot? _customRoot;
+    private string _customInput = "";
+    private bool _customOpen = true;
+    private string _customMessage = "";
+
+    private bool _isApplying = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _presets = await PresetService.LoadAsync();
+        _categoryCount = _presets?.Categories?.Count ?? 0;
+
+        _customRoot = await CustomSitesService.LoadAsync();
+    }
+
+    private async Task OnCategoryChangedAsync(string name)
+    {
+        if (_presets is null) return;
+        if (!_presets.Categories.TryGetValue(name, out var cat)) return;
+
+        cat.Enabled = !cat.Enabled;
+        await PresetService.SaveAsync(_presets);
+    }
+
+    private async Task AddCustomAsync()
+    {
+        _customMessage = "";
+
+        if (_customRoot == null)
+            _customRoot = await CustomSitesService.LoadAsync();
+
+        var (success, message, updatedRoot) = await CustomSitesService.AddCustomSite(_customInput);
+
+        _customRoot = updatedRoot;
+        _customMessage = message;
+
+        if (success)
+            _customInput = "";
+    }
+
+    private async Task ToggleCustomEnabledAsync(CustomEntry site, ChangeEventArgs e)
+    {
+        if (_customRoot is null) return;
+
+        bool newValue = false;
+
+        if (e.Value is bool b) newValue = b;
+        else if (e.Value is string s && bool.TryParse(s, out var parsed)) newValue = parsed;
+
+        site.Enabled = newValue;
+
+        CustomSitesService.NormalizeCustoms(_customRoot);
+        await CustomSitesService.SaveAsync(_customRoot);
+    }
+
+    private async Task OnCustomInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddCustomAsync();
+    }
+
+    private async Task ApplyBlockingAsync()
+    {
+        if (_isApplying) return;
+
+        _isApplying = true;
+        StateHasChanged(); // Show "Applying…" and disable the button immediately
+
+        await HostsFileService.ApplyAsync();
+
+        _isApplying = false;
+        // Blazor re-renders automatically after the event handler returns
+    }
+}

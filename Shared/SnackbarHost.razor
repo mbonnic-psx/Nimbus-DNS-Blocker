@@ -1,0 +1,11 @@
+﻿@inject Nimbus_Internet_Blocker.Services.ISnackbarService Snack
+
+<div class="snackbar-wrap" aria-live="polite" aria-relevant="additions">
+    @foreach (var msg in Snack.Messages)
+    {
+        <div class="snackbar @msg.Kind">
+            <div class="snackbar-title">@msg.Title</div>
+            <div class="snackbar-body">@msg.Message</div>
+        </div>
+    }
+</div>

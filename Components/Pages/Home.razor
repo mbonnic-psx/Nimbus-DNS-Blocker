@@ -1,0 +1,26 @@
+﻿@page "/"
+@inject QuoteService QuoteService
+
+<div class="page home-page">
+
+    <!-- Header -->
+    <div class="hero">
+        <h1 class="h1">Welcome to Nimbus DNS Blocker</h1>
+        <p class="subhead">
+            Your journey to digital wellness begins with small, mindful steps.
+            Block distractions and cultivate presence.
+        </p>
+    </div>
+
+    <!-- Quote of the Day -->
+    <div class="card card-pad-lg quote-card">
+        <div class="quote-icon" aria-hidden="true">
+            <span class="quote-book-icon"></span>
+        </div>
+
+        <div class="quote-text">
+            @QuoteService.CurrentQuote
+        </div>
+    </div>
+
+</div>
