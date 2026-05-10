@@ -26,6 +26,7 @@ namespace Nimbus_Internet_Blocker
             builder.Services.AddSingleton<PresetService>();
             builder.Services.AddSingleton<CustomSitesService>();
             builder.Services.AddSingleton<IHostsFileService, HostsFileService>();
+            builder.Services.AddSingleton<IPasswordService, PasswordService>();
             return builder.Build();
         }
     }

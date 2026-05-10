@@ -3,6 +3,7 @@
 @inject PresetService PresetService
 @inject CustomSitesService CustomSitesService
 @inject IHostsFileService HostsFileService
+@inject ISnackbarService Snackbar
 
 <div class="blocking-page">
     <!-- Page header (like Home) -->
@@ -97,12 +98,19 @@
                             <div class="entry-pill" style="margin-bottom:10px;">
                                 <div class="entry-host">@site.Host</div>
 
-                                <label class="switch" title="Enable/disable site">
+                                <label class="switch" title="Enable/disable @site.Host">
                                     <input type="checkbox"
                                            checked="@(site.Enabled ?? true)"
                                            @onchange="async e => await ToggleCustomEnabledAsync(site, e)" />
                                     <span class="slider"></span>
                                 </label>
+
+                                <button class="btn btn-remove"
+                                        type="button"
+                                        title="Remove @site.Host"
+                                        @onclick="async () => await RemoveCustomAsync(site.Host)">
+                                    🗑
+                                </button>
                             </div>
                         }
                     }
@@ -182,6 +190,18 @@
 
         if (success)
             _customInput = "";
+    }
+
+    private async Task RemoveCustomAsync(string host)
+    {
+        var (success, message, updatedRoot) = await CustomSitesService.RemoveCustomSiteAsync(host);
+
+        _customRoot = updatedRoot;
+
+        if (success)
+            Snackbar.Success("Site removed", message);
+        else
+            Snackbar.Error("Remove failed", message);
     }
 
     private async Task ToggleCustomEnabledAsync(CustomEntry site, ChangeEventArgs e)

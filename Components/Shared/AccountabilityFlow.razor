@@ -1,0 +1,207 @@
+@implements IDisposable
+@inject QuoteService QuoteService
+
+<div class="af-container">
+    @if (_currentIndex < _questions.Count)
+    {
+        <!-- Progress indicator -->
+        <div class="af-progress">
+            <div class="af-progress-label">Question @(_currentIndex + 1) of @_questions.Count</div>
+            <div class="af-dots">
+                @for (int i = 0; i < _questions.Count; i++)
+                {
+                    var idx = i;
+                    var dotClass = idx < _currentIndex  ? "af-dot done"
+                                 : idx == _currentIndex ? "af-dot active"
+                                 : "af-dot";
+                    <div class="@dotClass"></div>
+                }
+            </div>
+        </div>
+
+        <!-- Question text -->
+        <p class="af-question">@_questions[_currentIndex].Question</p>
+
+        <!-- Hint (accepted answers, or quote prompt for last question) -->
+        <div class="af-hint">@GetHint()</div>
+
+        <!-- Answer input -->
+        <input class="input"
+               type="text"
+               placeholder="Type your answer…"
+               @bind="_typedAnswer"
+               @bind:event="oninput"
+               @onkeydown="OnKeyDownAsync" />
+
+        <!-- Inline error -->
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="af-error">@_errorMessage</div>
+        }
+
+        <!-- Next / Finish button — disabled for 3 s after each question loads -->
+        <button class="btn btn-primary af-next"
+                type="button"
+                disabled="@(!_nextEnabled)"
+                @onclick="OnNextClickedAsync">
+            @if (!_nextEnabled)
+            {
+                <span>Please wait…</span>
+            }
+            else if (_currentIndex == _questions.Count - 1)
+            {
+                <span>Finish</span>
+            }
+            else
+            {
+                <span>Next</span>
+            }
+        </button>
+
+        <!-- Cancel -->
+        <button class="btn btn-ghost af-cancel"
+                type="button"
+                @onclick="OnCancelClickedAsync">
+            Cancel
+        </button>
+    }
+</div>
+
+@code {
+    // ── Parameters ─────────────────────────────────────────────────────────────
+
+    /// <summary>Raised when the user answers all 5 questions correctly.</summary>
+    [Parameter] public EventCallback OnFlowCompleted { get; set; }
+
+    /// <summary>Raised when the user clicks Cancel at any point.</summary>
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    // ── State ──────────────────────────────────────────────────────────────────
+
+    private int    _currentIndex  = 0;
+    private string _typedAnswer   = "";
+    private string _errorMessage  = "";
+    private bool   _nextEnabled   = false;
+    private bool   _disposed      = false;
+
+    private System.Threading.Timer? _countdownTimer;
+
+    // ── Questions ──────────────────────────────────────────────────────────────
+    /*
+     * Each question carries a set of accepted answers (lowercase, trimmed).
+     * The last question (index 4) uses the live quote from QuoteService instead
+     * of a fixed accepted-answers list — that check happens in OnNextClickedAsync.
+     */
+    private readonly IReadOnlyList<(string Question, string[] Accepted)> _questions =
+    [
+        (
+            "Where are you right now?",
+            new[] { "home", "work", "elsewhere" }
+        ),
+        (
+            "Who are you with?",
+            new[] { "myself", "family", "friends" }
+        ),
+        (
+            "Why are you doing this?",
+            new[] { "forgot password", "urge", "setting up" }
+        ),
+        (
+            "Do you really want to do this?",
+            new[] { "yes", "no" }
+        ),
+        (
+            "What is today's inspirational quote?",
+            Array.Empty<string>()   // validated dynamically against QuoteService
+        ),
+    ];
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized() => StartQuestionTimer();
+
+    // ── Timer ──────────────────────────────────────────────────────────────────
+
+    /*
+     * StartQuestionTimer()
+     * Fires once after 3 seconds to enable the Next button.
+     * Uses Timeout.Infinite so the timer never repeats.
+     * InvokeAsync marshals the StateHasChanged call back to the Blazor sync context.
+     */
+    private void StartQuestionTimer()
+    {
+        _countdownTimer?.Dispose();
+        _nextEnabled = false;
+
+        _countdownTimer = new System.Threading.Timer(_ =>
+        {
+            if (_disposed) return;
+            _nextEnabled = true;
+            InvokeAsync(StateHasChanged);
+        }, null, dueTime: 3000, period: System.Threading.Timeout.Infinite);
+    }
+
+    // ── Answer Handling ────────────────────────────────────────────────────────
+
+    private async Task OnNextClickedAsync()
+    {
+        if (!_nextEnabled) return;
+
+        var normalized = _typedAnswer.Trim().ToLowerInvariant();
+        bool isLastQuestion = _currentIndex == _questions.Count - 1;
+
+        // Last question: compare against the live quote (case-insensitive, trimmed)
+        bool correct = isLastQuestion
+            ? normalized == QuoteService.CurrentQuote.Trim().ToLowerInvariant()
+            : _questions[_currentIndex].Accepted.Contains(normalized);
+
+        if (!correct)
+        {
+            _errorMessage = "That is not a valid answer, please try again.";
+            return;
+        }
+
+        // ── Advance ────────────────────────────────────────────────────────────
+        _errorMessage = "";
+        _typedAnswer  = "";
+        _currentIndex++;
+
+        if (_currentIndex >= _questions.Count)
+        {
+            // All questions answered correctly — notify parent
+            await OnFlowCompleted.InvokeAsync();
+            return;
+        }
+
+        StartQuestionTimer();
+    }
+
+    private async Task OnCancelClickedAsync()
+        => await OnCancelled.InvokeAsync();
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && _nextEnabled)
+            await OnNextClickedAsync();
+    }
+
+    // ── Hint ───────────────────────────────────────────────────────────────────
+
+    /*
+     * GetHint()
+     * For questions 1-4: shows the accepted answers joined by " · "
+     * For the final quote question: shows a fixed prompt instead
+     */
+    private string GetHint()
+        => _currentIndex == _questions.Count - 1
+            ? "Enter today's inspirational quote exactly as shown on the home screen"
+            : string.Join(" · ", _questions[_currentIndex].Accepted);
+
+    // ── Cleanup ────────────────────────────────────────────────────────────────
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _countdownTimer?.Dispose();
+    }
+}

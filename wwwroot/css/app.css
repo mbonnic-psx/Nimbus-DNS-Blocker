@@ -349,9 +349,25 @@ body {
 }
 
 .entry-host {
+    flex: 1;
     font-size: 13px;
     color: var(--text);
 }
+
+/* Subtle trash button inside custom-site rows */
+.btn-remove {
+    padding: 4px 8px;
+    color: rgba(255, 120, 120, 0.45);
+    background: transparent;
+    box-shadow: none;
+    border-color: transparent;
+}
+
+    .btn-remove:hover {
+        color: rgba(255, 120, 120, 0.90);
+        background: rgba(255, 120, 120, 0.10);
+        border-color: rgba(255, 120, 120, 0.22);
+    }
 
 /* Snackbars */
 .snackbar-wrap {
@@ -641,4 +657,111 @@ body {
     color: rgba(255, 210, 120, 0.92);
     font-size: 13px;
     text-align: center;
+}
+
+/* ── Accountability Flow ──────────────────────────────────────────────────── */
+
+.af-container {
+    width: min(520px, 100%);
+    margin: 0 auto;
+    padding: 36px 32px;
+    display: grid;
+    gap: 24px;
+    background: var(--card-grad);
+    border: 1px solid var(--border);
+    border-radius: var(--r24);
+    box-shadow: var(--shadow-lg);
+}
+
+.af-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.af-progress-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.af-dots {
+    display: flex;
+    gap: 10px;
+}
+
+.af-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background 350ms ease, border-color 350ms ease, box-shadow 350ms ease;
+}
+
+.af-dot.done {
+    background: rgba(160, 200, 235, 0.40);
+    border-color: rgba(160, 200, 235, 0.30);
+}
+
+.af-dot.active {
+    background: var(--accent);
+    border-color: rgba(160, 200, 235, 0.55);
+    box-shadow: 0 0 10px rgba(160, 200, 235, 0.30);
+}
+
+.af-question {
+    font-size: 22px;
+    font-weight: 350;
+    line-height: 1.55;
+    color: rgba(245, 250, 255, 0.88);
+    text-align: center;
+    letter-spacing: 0.01em;
+    margin: 0;
+}
+
+.af-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    letter-spacing: 0.03em;
+}
+
+.af-error {
+    font-size: 13px;
+    color: rgba(255, 140, 140, 0.90);
+    text-align: center;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 120, 120, 0.07);
+    border: 1px solid rgba(255, 120, 120, 0.16);
+}
+
+.af-next {
+    width: 100%;
+    padding: 13px 24px;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+}
+
+.af-next:disabled {
+    opacity: 0.40;
+    cursor: not-allowed;
+    transform: none;
+    pointer-events: none;
+}
+
+.af-cancel {
+    width: 100%;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 8px;
+    text-align: center;
+}
+
+.af-cancel:hover {
+    color: var(--text-muted);
 }

@@ -175,6 +175,29 @@ namespace Nimbus_Internet_Blocker.Services
             return (true, "Custom site added successfully.", root);
         }
 
+        public async Task<(bool success, string message, CustomsRoot updatedRoot)> RemoveCustomSiteAsync(string host)
+        {
+            CustomsRoot root = await LoadAsync(); // Load the current custom sites
+
+            var normalizedHost = NormalizeHost(host); // Normalize for consistent comparison
+
+            if (string.IsNullOrWhiteSpace(normalizedHost))
+                return (false, "Invalid host provided.", root);
+
+            bool exists = root.Sites.Any(s => string.Equals(s.Host, normalizedHost, StringComparison.OrdinalIgnoreCase));
+
+            if (!exists)
+                return (false, $"{normalizedHost} was not found in your custom sites.", root);
+
+            root.Sites = root.Sites
+                .Where(s => !string.Equals(s.Host, normalizedHost, StringComparison.OrdinalIgnoreCase))
+                .ToList(); // Filter out the matching entry
+
+            await SaveAsync(root); // Persist the updated list
+
+            return (true, $"{normalizedHost} removed from your custom sites.", root);
+        }
+
         private async Task<string> ReadSeedTextAsync(string seedFileName)
         {
             //string seedPath = Path.Combine(FileSystem.AppDataDirectory, seedFileName);
