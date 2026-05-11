@@ -1,0 +1,118 @@
+@inject IPasswordService PasswordService
+@inject IJSRuntime JS
+
+<div class="gf-container">
+
+    <!-- Warning banner -->
+    <div class="gf-warning">
+        This code will not be shown again. Type it exactly including the dashes.
+    </div>
+
+    <!-- Generated hash display — shown once, never stored elsewhere -->
+    <div class="gf-hash-box">
+        <div class="gf-hash-text">@_generatedHash</div>
+    </div>
+
+    <!-- Input label -->
+    <div class="gf-input-label">Type the code above to confirm</div>
+
+    <!-- Answer input — paste is disabled via JS interop in OnAfterRenderAsync -->
+    <input class="input gf-input"
+           id="guardian-input"
+           type="text"
+           placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX"
+           autocomplete="off"
+           spellcheck="false"
+           @bind="_typedHash"
+           @bind:event="oninput" />
+
+    <!-- Inline error message -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="gf-error">@_errorMessage</div>
+    }
+
+    <!-- Confirm button — disabled until the user has typed at least one character -->
+    <button class="btn btn-primary gf-confirm"
+            type="button"
+            disabled="@(_typedHash.Length == 0)"
+            @onclick="OnConfirmClickedAsync">
+        Confirm
+    </button>
+
+    <!-- Cancel -->
+    <button class="btn btn-ghost gf-cancel"
+            type="button"
+            @onclick="OnCancelClickedAsync">
+        Cancel
+    </button>
+
+</div>
+
+@code {
+    // ── Parameters ─────────────────────────────────────────────────────────────
+
+    /// <summary>Raised when the user successfully types the hash back exactly.</summary>
+    [Parameter] public EventCallback OnFlowCompleted { get; set; }
+
+    /// <summary>Raised when the user clicks Cancel.</summary>
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    // ── State ──────────────────────────────────────────────────────────────────
+
+    private string _generatedHash = "";
+    private string _typedHash     = "";
+    private string _errorMessage  = "";
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    /*
+     * OnInitialized()
+     * Generates the one-time hash immediately on component mount.
+     * The result lives only in this field — it is never written to
+     * Preferences, a file, or anywhere else.
+     * GenerateGuardianHash() is synchronous so no async needed here.
+     */
+    protected override void OnInitialized()
+    {
+        _generatedHash = PasswordService.GenerateGuardianHash();
+    }
+
+    /*
+     * OnAfterRenderAsync()
+     * Wires the paste-prevention listener on the first render only,
+     * after the DOM element with id="guardian-input" is guaranteed to exist.
+     * Using eval keeps this self-contained — no separate JS file required.
+     */
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await JS.InvokeVoidAsync("eval",
+            "document.getElementById('guardian-input').addEventListener('paste', e => e.preventDefault())");
+    }
+
+    // ── Handlers ───────────────────────────────────────────────────────────────
+
+    /*
+     * OnConfirmClickedAsync()
+     * Performs a strict case-sensitive exact match against the generated hash.
+     * On success: raises OnFlowCompleted so the parent can unlock the app.
+     * On failure: sets the error message and leaves typedHash intact so the
+     * user can see what they typed and identify any discrepancy.
+     */
+    private async Task OnConfirmClickedAsync()
+    {
+        if (_typedHash == _generatedHash)
+        {
+            await OnFlowCompleted.InvokeAsync();
+        }
+        else
+        {
+            _errorMessage = "Code does not match, please try again.";
+        }
+    }
+
+    private async Task OnCancelClickedAsync()
+        => await OnCancelled.InvokeAsync();
+}

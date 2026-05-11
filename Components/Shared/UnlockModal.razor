@@ -1,0 +1,191 @@
+@inject IPasswordService PasswordService
+
+@if (IsVisible)
+{
+    <div class="um-overlay">
+
+        @if (_currentView == "password")
+        {
+            <!-- Password view — contained in its own card -->
+            <div class="um-card">
+
+                <h2 class="um-title">Unlock Nimbus</h2>
+
+                <!-- Password input -->
+                <input class="input"
+                       type="password"
+                       placeholder="Enter your password"
+                       autocomplete="current-password"
+                       @bind="_passwordAttempt"
+                       @bind:event="oninput"
+                       @onkeydown="OnPasswordKeyDownAsync" />
+
+                <!-- Inline error -->
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="um-error">@_errorMessage</div>
+                }
+
+                <!-- Unlock button — disabled until the user has typed something -->
+                <button class="btn btn-primary um-submit"
+                        type="button"
+                        disabled="@(_passwordAttempt.Length == 0)"
+                        @onclick="OnSubmitClickedAsync">
+                    Unlock
+                </button>
+
+                <!-- Forgot password — routes to the correct recovery flow -->
+                <button class="btn btn-ghost um-forgot"
+                        type="button"
+                        @onclick="OnForgotClicked">
+                    Forgot your password?
+                </button>
+
+                <!-- Cancel — closes the modal without applying -->
+                <button class="btn btn-ghost um-cancel"
+                        type="button"
+                        @onclick="OnCancelClickedAsync">
+                    Cancel
+                </button>
+
+            </div>
+        }
+        else if (_currentView == "accountability")
+        {
+            <!-- AccountabilityFlow renders its own af-container card -->
+            <AccountabilityFlow OnFlowCompleted="HandleFlowCompleted"
+                                OnCancelled="ReturnToPassword" />
+        }
+        else if (_currentView == "guardian")
+        {
+            <!-- GuardianFlow renders its own gf-container card -->
+            <GuardianFlow OnFlowCompleted="HandleFlowCompleted"
+                          OnCancelled="ReturnToPassword" />
+        }
+
+    </div>
+}
+
+@code {
+    // ── Parameters ─────────────────────────────────────────────────────────────
+
+    /// <summary>Controls whether the modal is rendered. When false nothing is added to the DOM.</summary>
+    [Parameter] public bool IsVisible { get; set; }
+
+    /// <summary>Raised when the user successfully authenticates (password or recovery flow).</summary>
+    [Parameter] public EventCallback OnUnlocked { get; set; }
+
+    /// <summary>Raised when the user dismisses the modal without authenticating.</summary>
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    // ── State ──────────────────────────────────────────────────────────────────
+
+    private string _passwordAttempt = "";
+    private string _errorMessage    = "";
+    private string _currentView     = "password"; // "password" | "accountability" | "guardian"
+
+    /*
+     * _wasVisible tracks the previous IsVisible value so OnParametersSet()
+     * can detect the moment the modal transitions from hidden to visible and
+     * reset all state to a clean password view.
+     */
+    private bool _wasVisible = false;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    /*
+     * OnParametersSet()
+     * Runs every time a parent re-renders and pushes new parameter values down.
+     * When IsVisible flips from false → true we reset the modal completely so
+     * the user never sees stale errors, a half-typed password, or a leftover
+     * recovery view from a previous session.
+     */
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && !_wasVisible)
+        {
+            _currentView      = "password";
+            _passwordAttempt  = "";
+            _errorMessage     = "";
+        }
+
+        _wasVisible = IsVisible;
+    }
+
+    // ── Password View Handlers ─────────────────────────────────────────────────
+
+    /*
+     * OnSubmitClickedAsync()
+     * Synchronously verifies the typed password against the stored PBKDF2 hash.
+     * On success:  invokes OnUnlocked so the parent can proceed.
+     * On failure:  sets an error message and clears the attempt so the user
+     *              starts fresh (avoids leaking how many chars were correct).
+     */
+    private async Task OnSubmitClickedAsync()
+    {
+        bool correct = PasswordService.VerifyPassword(_passwordAttempt);
+
+        if (correct)
+        {
+            await OnUnlocked.InvokeAsync();
+        }
+        else
+        {
+            _errorMessage    = "Incorrect password.";
+            _passwordAttempt = "";
+        }
+    }
+
+    /*
+     * OnForgotClicked()
+     * Reads the user's chosen recovery mode from Preferences and switches
+     * to the matching recovery view. Both child components render their own
+     * card and are destroyed/re-created on each transition.
+     */
+    private void OnForgotClicked()
+    {
+        var mode = PasswordService.GetRecoveryMode();
+
+        _currentView = mode == RecoveryMode.Accountability
+            ? "accountability"
+            : "guardian";
+    }
+
+    private async Task OnCancelClickedAsync()
+        => await OnCancelled.InvokeAsync();
+
+    /*
+     * OnPasswordKeyDownAsync()
+     * Allows the user to submit with Enter rather than clicking the button —
+     * standard password-field UX. Only fires if there is actually something typed.
+     */
+    private async Task OnPasswordKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && _passwordAttempt.Length > 0)
+            await OnSubmitClickedAsync();
+    }
+
+    // ── Recovery Flow Handlers ─────────────────────────────────────────────────
+
+    /*
+     * HandleFlowCompleted()
+     * Called by both AccountabilityFlow and GuardianFlow when the user passes
+     * their respective recovery check. Raises OnUnlocked to the parent.
+     */
+    private async Task HandleFlowCompleted()
+        => await OnUnlocked.InvokeAsync();
+
+    /*
+     * ReturnToPassword()
+     * Called by both recovery flows when the user clicks Cancel inside them.
+     * Resets all state and returns to the password view.
+     * Destroying the child component (by switching the @if branch) also
+     * triggers AccountabilityFlow.Dispose(), stopping its countdown timer.
+     */
+    private void ReturnToPassword()
+    {
+        _currentView     = "password";
+        _errorMessage    = "";
+        _passwordAttempt = "";
+    }
+}

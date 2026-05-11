@@ -765,3 +765,296 @@ body {
 .af-cancel:hover {
     color: var(--text-muted);
 }
+
+/* ── Guardian Flow ────────────────────────────────────────────────────────── */
+
+.gf-container {
+    width: min(520px, 100%);
+    margin: 0 auto;
+    padding: 36px 32px;
+    display: grid;
+    gap: 22px;
+    background: var(--card-grad);
+    border: 1px solid var(--border);
+    border-radius: var(--r24);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Bold amber banner — warns the user the code is shown exactly once */
+.gf-warning {
+    padding: 13px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 210, 110, 0.28);
+    background: rgba(255, 190, 70, 0.07);
+    color: rgba(255, 220, 130, 0.95);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.6;
+    text-align: center;
+}
+
+/*
+ * Hash display box — dark inset panel that makes the code read like a
+ * terminal output rather than normal UI text. user-select: none prevents
+ * accidental selection and reinforces the "type it, don't copy it" intent.
+ */
+.gf-hash-box {
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.30);
+    border: 1px solid rgba(160, 200, 235, 0.20);
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.30),
+                0 0 24px rgba(160, 200, 235, 0.05);
+    text-align: center;
+    user-select: none;
+}
+
+.gf-hash-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    word-break: break-all;
+    line-height: 1.2;
+}
+
+/* Small instructional label above the input */
+.gf-input-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.03em;
+    text-align: center;
+}
+
+/*
+ * Monospace input — matching the display font makes character-by-character
+ * comparison much easier while the user is transcribing the code.
+ */
+.gf-input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    text-align: center;
+}
+
+.gf-error {
+    font-size: 13px;
+    color: rgba(255, 140, 140, 0.90);
+    text-align: center;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 120, 120, 0.07);
+    border: 1px solid rgba(255, 120, 120, 0.16);
+}
+
+.gf-confirm {
+    width: 100%;
+    padding: 13px 24px;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+}
+
+.gf-confirm:disabled {
+    opacity: 0.40;
+    cursor: not-allowed;
+    transform: none;
+    pointer-events: none;
+}
+
+.gf-cancel {
+    width: 100%;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 8px;
+    text-align: center;
+}
+
+.gf-cancel:hover {
+    color: var(--text-muted);
+}
+
+/* ── Settings Page ────────────────────────────────────────────────────────── */
+
+.settings-page {
+    padding: 44px 0;
+    display: grid;
+    gap: 22px;
+    width: min(680px, 100%);
+    margin: 0 auto;
+    padding-bottom: 44px;
+}
+
+/* ── Password Section ─────────────────────────────────────────────────────── */
+
+/*
+ * pw-section turns the card into a grid so every direct child —
+ * headings, field groups, buttons, dividers — stacks with consistent
+ * spacing without needing individual margins.
+ */
+.pw-section {
+    display: grid;
+    gap: 20px;
+}
+
+.pw-heading {
+    font-size: 18px;
+    font-weight: 700;
+    color: rgba(245, 250, 255, 0.90);
+    margin: 0;
+}
+
+.pw-subheading {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+}
+
+/* Stacked input group — gap between fields only, no outer margin */
+.pw-field-group {
+    display: grid;
+    gap: 10px;
+}
+
+/* Small label printed above the mode picker grid */
+.pw-mode-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    margin-bottom: -8px; /* tighten the gap between label and grid */
+}
+
+/* Two-column recovery mode picker */
+.pw-mode-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 520px) {
+    .pw-mode-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/*
+ * Each option is a full <button> so it gets keyboard focus and click
+ * for free. Raised state: normal card surface. Active state: neumorphic
+ * pressed/inset — the shadow flips inward to simulate a sunken button.
+ */
+.pw-mode-option {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 18px;
+    border-radius: var(--r20);
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+    text-align: left;
+    appearance: none;
+    color: var(--text);
+    width: 100%;
+}
+
+    .pw-mode-option:hover {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: var(--border-2);
+    }
+
+    /* Neumorphic pressed state — inset shadow makes it look sunken */
+    .pw-mode-option.active {
+        background: rgba(160, 200, 235, 0.07);
+        border-color: rgba(160, 200, 235, 0.32);
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30),
+                    inset 0 1px 3px rgba(0, 0, 0, 0.18);
+    }
+
+    .pw-mode-option:focus {
+        outline: none;
+        box-shadow: var(--shadow-md), var(--ring);
+    }
+
+    .pw-mode-option.active:focus {
+        outline: none;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30),
+                    inset 0 1px 3px rgba(0, 0, 0, 0.18),
+                    var(--ring);
+    }
+
+.pw-mode-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(245, 250, 255, 0.90);
+}
+
+.pw-mode-subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+/* Read-only row showing the active recovery mode */
+.pw-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.16);
+    border: 1px solid var(--border);
+}
+
+.pw-status-label {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.pw-status-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+/* Thin horizontal rule between subsections */
+.pw-divider {
+    height: 1px;
+    border: none;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+/* Danger-tinted confirmation box for the remove flow */
+.pw-remove-confirmation {
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: rgba(255, 120, 120, 0.06);
+    border: 1px solid rgba(255, 120, 120, 0.20);
+    display: grid;
+    gap: 14px;
+}
+
+.pw-remove-warning {
+    font-size: 13px;
+    color: rgba(255, 185, 170, 0.92);
+    text-align: center;
+    line-height: 1.6;
+}
+
+.pw-remove-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+/* Sized button for primary actions within the password section */
+.pw-action-btn {
+    padding: 12px 28px;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+}

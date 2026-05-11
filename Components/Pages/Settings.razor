@@ -1,10 +1,253 @@
-﻿@page "/settings"
+@page "/settings"
+@inject IPasswordService PasswordService
+@inject ISnackbarService Snackbar
 
-<div class="card card-pad">
-    <h1 class="h1">Settings</h1>
-    <p class="subhead">Coming soon.</p>
+<div class="settings-page">
+
+    <!-- Existing content — preserved unchanged -->
+    <div class="card card-pad">
+        <h1 class="h1">Settings</h1>
+        <p class="subhead">Coming soon.</p>
+    </div>
+
+    <!-- ── Password Protection ─────────────────────────────────────────────── -->
+    <div class="card card-pad pw-section">
+
+        @if (!_passwordEnabled)
+        {
+            <!-- ══ NO PASSWORD SET — Set Password Form ══════════════════════ -->
+
+            <h2 class="pw-heading">Set Up Password Protection</h2>
+
+            <!-- New password inputs -->
+            <div class="pw-field-group">
+                <input class="input"
+                       type="password"
+                       placeholder="New password"
+                       autocomplete="new-password"
+                       @bind="_newPassword"
+                       @bind:event="oninput" />
+
+                <input class="input"
+                       type="password"
+                       placeholder="Confirm password"
+                       autocomplete="new-password"
+                       @bind="_confirmPassword"
+                       @bind:event="oninput" />
+            </div>
+
+            <!-- Recovery mode picker -->
+            <div class="pw-mode-label">Recovery Mode</div>
+
+            <div class="pw-mode-grid">
+                <button class="pw-mode-option @(_selectedMode == RecoveryMode.Accountability ? "active" : "")"
+                        type="button"
+                        @onclick="() => _selectedMode = RecoveryMode.Accountability">
+                    <div class="pw-mode-title">Accountability Mode</div>
+                    <div class="pw-mode-subtitle">Answer 5 grounding questions and today's quote</div>
+                </button>
+
+                <button class="pw-mode-option @(_selectedMode == RecoveryMode.Guardian ? "active" : "")"
+                        type="button"
+                        @onclick="() => _selectedMode = RecoveryMode.Guardian">
+                    <div class="pw-mode-title">Guardian Mode</div>
+                    <div class="pw-mode-subtitle">Transcribe a one-time generated code</div>
+                </button>
+            </div>
+
+            <button class="btn btn-primary pw-action-btn"
+                    type="button"
+                    @onclick="SetPasswordAsync">
+                Set Password
+            </button>
+        }
+        else
+        {
+            <!-- ══ PASSWORD IS SET — Password Management ═════════════════════ -->
+
+            <h2 class="pw-heading">Password Protection Active</h2>
+
+            <!-- Current recovery mode — read only -->
+            <div class="pw-status-row">
+                <span class="pw-status-label">Recovery Mode:</span>
+                <span class="pw-status-value">
+                    @(PasswordService.GetRecoveryMode() == RecoveryMode.Accountability
+                        ? "Accountability"
+                        : "Guardian")
+                </span>
+            </div>
+
+            <hr class="pw-divider" />
+
+            <!-- ── Change Password ────────────────────────────────────────── -->
+
+            <h3 class="pw-subheading">Change Password</h3>
+
+            <div class="pw-field-group">
+                <input class="input"
+                       type="password"
+                       placeholder="Current password"
+                       autocomplete="current-password"
+                       @bind="_currentPassword"
+                       @bind:event="oninput" />
+
+                <input class="input"
+                       type="password"
+                       placeholder="New password"
+                       autocomplete="new-password"
+                       @bind="_newPassword"
+                       @bind:event="oninput" />
+
+                <input class="input"
+                       type="password"
+                       placeholder="Confirm new password"
+                       autocomplete="new-password"
+                       @bind="_confirmPassword"
+                       @bind:event="oninput" />
+            </div>
+
+            <button class="btn btn-primary pw-action-btn"
+                    type="button"
+                    @onclick="ChangePasswordAsync">
+                Change Password
+            </button>
+
+            <hr class="pw-divider" />
+
+            <!-- ── Remove Password ────────────────────────────────────────── -->
+
+            <h3 class="pw-subheading">Remove Password</h3>
+
+            @if (!_showRemoveConfirmation)
+            {
+                <button class="btn btn-danger pw-action-btn"
+                        type="button"
+                        @onclick="() => _showRemoveConfirmation = true">
+                    Remove Password
+                </button>
+            }
+            else
+            {
+                <div class="pw-remove-confirmation">
+                    <div class="pw-remove-warning">
+                        Are you sure? This will remove all password protection.
+                    </div>
+                    <div class="pw-remove-actions">
+                        <button class="btn btn-danger"
+                                type="button"
+                                @onclick="ConfirmRemovePasswordAsync">
+                            Confirm
+                        </button>
+                        <button class="btn btn-ghost"
+                                type="button"
+                                @onclick="() => _showRemoveConfirmation = false">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+
+    </div>
+
 </div>
 
 @code {
+    // ── State ──────────────────────────────────────────────────────────────────
 
+    private string _newPassword          = "";
+    private string _confirmPassword      = "";
+    private string _currentPassword      = "";
+    private RecoveryMode _selectedMode   = RecoveryMode.Accountability;
+    private bool _showRemoveConfirmation = false;
+    private bool _passwordEnabled        = false;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized()
+    {
+        _passwordEnabled = PasswordService.IsPasswordEnabled();
+    }
+
+    // ── Set Password ───────────────────────────────────────────────────────────
+
+    /*
+     * SetPasswordAsync()
+     * Delegates validation and hashing entirely to PasswordService.
+     * Snackbars the returned message whether it succeeded or not so the
+     * user always gets feedback (e.g. "Password must be at least 8 characters").
+     * On success: clears both inputs, refreshes the enabled flag, and forces
+     * a re-render so the management view replaces the set-password form.
+     */
+    private async Task SetPasswordAsync()
+    {
+        var (success, message) = await PasswordService.SetPasswordAsync(
+            _newPassword, _confirmPassword, _selectedMode);
+
+        if (success)
+            Snackbar.Success("Password set", message);
+        else
+            Snackbar.Error("Failed to set password", message);
+
+        if (success)
+        {
+            _newPassword     = "";
+            _confirmPassword = "";
+            _passwordEnabled = PasswordService.IsPasswordEnabled();
+            StateHasChanged();
+        }
+    }
+
+    // ── Change Password ────────────────────────────────────────────────────────
+
+    /*
+     * ChangePasswordAsync()
+     * Verifies the current password first so an attacker who walks up to an
+     * unlocked machine cannot silently swap the password.
+     *
+     * Passes GetRecoveryMode() — not _selectedMode — into SetPasswordAsync so
+     * the existing recovery mode is preserved when only the password is changed.
+     * The user would have to go through Remove + Set again to change their mode.
+     */
+    private async Task ChangePasswordAsync()
+    {
+        bool currentCorrect = PasswordService.VerifyPassword(_currentPassword);
+        if (!currentCorrect)
+        {
+            Snackbar.Error("Incorrect password", "Current password is incorrect.");
+            return;
+        }
+
+        var (success, message) = await PasswordService.SetPasswordAsync(
+            _newPassword, _confirmPassword, PasswordService.GetRecoveryMode());
+
+        if (success)
+            Snackbar.Success("Password changed", message);
+        else
+            Snackbar.Error("Failed to change password", message);
+
+        if (success)
+        {
+            _currentPassword = "";
+            _newPassword     = "";
+            _confirmPassword = "";
+        }
+    }
+
+    // ── Remove Password ────────────────────────────────────────────────────────
+
+    /*
+     * ConfirmRemovePasswordAsync()
+     * Called only after the user clicks Confirm in the inline confirmation box.
+     * Clears all stored password data via ClearPasswordAsync(), then refreshes
+     * the enabled flag and forces a re-render to swap back to the set-password form.
+     */
+    private async Task ConfirmRemovePasswordAsync()
+    {
+        await PasswordService.ClearPasswordAsync();
+        Snackbar.Success("Password removed", "Password removed successfully.");
+        _passwordEnabled        = PasswordService.IsPasswordEnabled();
+        _showRemoveConfirmation = false;
+        StateHasChanged();
+    }
 }
