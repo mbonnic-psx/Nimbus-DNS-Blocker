@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,59 +8,77 @@ namespace Nimbus_Internet_Blocker.Services
 {
     /*
      * IPasswordService
-     * Defines the contract for all password-related operations in Nimbus
-     * Program against this interface everywhere — never depend on PasswordService directly
-     * This makes the service swappable and testable
+     * Defines the contract for all password-related operations in Nimbus.
+     * Program against this interface everywhere — never depend on PasswordService directly.
+     * This makes the service swappable and testable.
+     *
+     * Two protection modes:
+     *   Accountability — no password. Stores only a flag. Unlocked by answering 5 questions.
+     *   Guardian       — stores a PBKDF2 password hash. Recovery via a one-time hash code.
      */
     public interface IPasswordService
     {
-        // ── Password State ─────────────────────────────────────────────────────
+        // ── Mode State ─────────────────────────────────────────────────────────
 
         /*
          * IsPasswordEnabled()
-         * Returns true if the user has set up a password
-         * Used by UnlockModal to decide whether to show the lock prompt
+         * Returns true only when Guardian mode is active (a password hash is stored).
+         * Returns false in Accountability mode and when nothing is set.
+         * Used by UnlockModal and Blocking.razor to decide whether to show the lock prompt.
          */
         bool IsPasswordEnabled();
 
         /*
+         * IsAccountabilityModeActive()
+         * Returns true when the user has activated Accountability mode.
+         * In this state IsPasswordEnabled() is false — there is no password to verify.
+         * The UnlockModal routes to AccountabilityFlow when this is true.
+         */
+        bool IsAccountabilityModeActive();
+
+        /*
          * GetRecoveryMode()
-         * Returns the recovery mode the user chose during password setup
-         * Either Accountability (5 questions + quote) or Guardian (one-time hash)
+         * Returns Accountability if the accountability flag is set, Guardian otherwise.
+         * Used by UnlockModal to decide which recovery flow to show.
          */
         RecoveryMode GetRecoveryMode();
 
-        /*
-         * SetRecoveryMode()
-         * Updates the stored recovery mode
-         * Called from Settings if the user wants to switch modes
-         */
-        void SetRecoveryMode(RecoveryMode mode);
+        // ── Mode Setup ─────────────────────────────────────────────────────────
 
-        // ── Password Management ────────────────────────────────────────────────
+        /*
+         * SetAccountabilityModeAsync()
+         * Activates Accountability mode.
+         * Stores only the accountability flag — never touches a password hash.
+         * Clears any existing Guardian password so the modes are mutually exclusive.
+         */
+        Task SetAccountabilityModeAsync();
 
         /*
          * SetPasswordAsync()
-         * Validates, hashes, and stores a new password
-         * Returns (true, success message) or (false, error message)
-         * Never throws — all failures come back as a false result
+         * Guardian mode only — validates, hashes, and stores a new password.
+         * Always marks the mode as Guardian and clears the accountability flag.
+         * Returns (true, success message) or (false, error message).
+         * Never throws — all failures come back as a false result with a message.
          */
         Task<(bool success, string message)> SetPasswordAsync(
             string password,
-            string confirmPassword,
-            RecoveryMode recoveryMode);
+            string confirmPassword);
+
+        // ── Password Operations ────────────────────────────────────────────────
 
         /*
          * VerifyPassword()
-         * Checks a password attempt against the stored hash
-         * Returns true if correct, false if wrong or no password is set
+         * Checks a password attempt against the stored Guardian hash.
+         * Returns true if correct, false if wrong or no password is set.
+         * Never called in Accountability mode — the flow uses question answers instead.
          */
         bool VerifyPassword(string attempt);
 
         /*
          * ClearPasswordAsync()
-         * Removes the stored password and resets all password preferences
-         * Called from Settings when the user removes their password
+         * Removes all stored protection state — hash, enabled flag, accountability flag,
+         * and recovery mode. Resets the app to the unprotected state.
+         * Called after the user passes the unlock flow in Settings.
          */
         Task ClearPasswordAsync();
 
@@ -70,8 +88,8 @@ namespace Nimbus_Internet_Blocker.Services
          * GenerateGuardianHash()
          * Generates a cryptographically random one-time hash in the format:
          * xxxxxx-xxxxxx-xxxxxx-xxxxxx
-         * NEVER stored anywhere — shown once and discarded
-         * Used by GuardianFlow as the forgot password recovery method
+         * NEVER stored anywhere — shown once during Guardian setup and discarded.
+         * The user must hand this to their trusted contact immediately.
          */
         string GenerateGuardianHash();
     }

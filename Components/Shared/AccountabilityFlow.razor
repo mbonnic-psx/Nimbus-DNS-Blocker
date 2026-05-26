@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject QuoteService QuoteService
+@inject IJSRuntime JS
 
 <div class="af-container">
     @if (_currentIndex < _questions.Count)
@@ -22,11 +23,36 @@
         <!-- Question text -->
         <p class="af-question">@_questions[_currentIndex].Question</p>
 
-        <!-- Hint (accepted answers, or quote prompt for last question) -->
+        <!-- Quote box — shown only on the last question so the user can read and type it -->
+        @if (_currentIndex == _questions.Count - 1)
+        {
+            <div class="af-quote-box">
+                <div class="af-quote-text">@QuoteService.CurrentQuote</div>
+            </div>
+        }
+
+        <!-- Hint text -->
         <div class="af-hint">@GetHint()</div>
 
-        <!-- Answer input -->
+        <!-- Early-exit note for Q3 (urge) -->
+        @if (_currentIndex == 2)
+        {
+            <div class="af-early-exit-note">Choosing "urge" will close this flow.</div>
+        }
+
+        <!-- Early-exit note for Q4 (no) -->
+        @if (_currentIndex == 3)
+        {
+            <div class="af-early-exit-note">Choosing "no" will close this flow.</div>
+        }
+
+        <!--
+            Answer input.
+            On the last question: gets id="af-quote-input" so OnAfterRenderAsync can
+            attach a paste-prevention listener, matching the pattern in GuardianFlow.razor.
+        -->
         <input class="input"
+               id="@(_currentIndex == _questions.Count - 1 ? "af-quote-input" : null)"
                type="text"
                placeholder="Type your answer…"
                @bind="_typedAnswer"
@@ -70,10 +96,10 @@
 @code {
     // ── Parameters ─────────────────────────────────────────────────────────────
 
-    /// <summary>Raised when the user answers all 5 questions correctly.</summary>
+    /// <summary>Raised when the user passes all 5 questions correctly.</summary>
     [Parameter] public EventCallback OnFlowCompleted { get; set; }
 
-    /// <summary>Raised when the user clicks Cancel at any point.</summary>
+    /// <summary>Raised when the user clicks Cancel, or when an early-exit answer is given.</summary>
     [Parameter] public EventCallback OnCancelled { get; set; }
 
     // ── State ──────────────────────────────────────────────────────────────────
@@ -84,13 +110,21 @@
     private bool   _nextEnabled   = false;
     private bool   _disposed      = false;
 
+    /*
+     * _pasteListenerAttached prevents the OnAfterRenderAsync from attaching
+     * the paste-prevention listener more than once when the component re-renders
+     * on Q5 (e.g. after the timer fires and StateHasChanged() is called).
+     */
+    private bool _pasteListenerAttached = false;
+
     private System.Threading.Timer? _countdownTimer;
 
     // ── Questions ──────────────────────────────────────────────────────────────
     /*
-     * Each question carries a set of accepted answers (lowercase, trimmed).
-     * The last question (index 4) uses the live quote from QuoteService instead
-     * of a fixed accepted-answers list — that check happens in OnNextClickedAsync.
+     * Questions are fixed at component definition time.
+     * Q3 (index 2): "urge" is a valid answer but triggers OnCancelled — see OnNextClickedAsync.
+     * Q4 (index 3): "no"   is a valid answer but triggers OnCancelled — see OnNextClickedAsync.
+     * Q5 (index 4): validated dynamically against QuoteService.CurrentQuote (stripped of quotes).
      */
     private readonly IReadOnlyList<(string Question, string[] Accepted)> _questions =
     [
@@ -112,7 +146,7 @@
         ),
         (
             "What is today's inspirational quote?",
-            Array.Empty<string>()   // validated dynamically against QuoteService
+            Array.Empty<string>()   // validated dynamically — see GetNormalizedQuote()
         ),
     ];
 
@@ -120,13 +154,40 @@
 
     protected override void OnInitialized() => StartQuestionTimer();
 
+    /*
+     * OnAfterRenderAsync()
+     * Attaches a paste-prevention listener to the quote input (id="af-quote-input")
+     * the first time Q5 is rendered. Uses optional chaining (?.) so no JS error
+     * is thrown if the element isn't in the DOM yet on the render that fires the timer.
+     *
+     * This mirrors the pattern in GuardianFlow.razor — the user must type the quote
+     * character by character without pasting, which provides a meaningful grounding moment.
+     */
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_currentIndex == _questions.Count - 1 && !_pasteListenerAttached)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    "document.getElementById('af-quote-input')?.addEventListener('paste', e => e.preventDefault())");
+                _pasteListenerAttached = true;
+            }
+            catch
+            {
+                // JS interop unavailable (e.g. pre-render) — silently skip
+            }
+        }
+    }
+
     // ── Timer ──────────────────────────────────────────────────────────────────
 
     /*
      * StartQuestionTimer()
      * Fires once after 3 seconds to enable the Next button.
-     * Uses Timeout.Infinite so the timer never repeats.
-     * InvokeAsync marshals the StateHasChanged call back to the Blazor sync context.
+     * The mandatory wait prevents the user from racing through questions reflexively.
+     * Uses Timeout.Infinite so the timer fires exactly once per question.
+     * InvokeAsync marshals the StateHasChanged call to the Blazor sync context.
      */
     private void StartQuestionTimer()
     {
@@ -147,17 +208,38 @@
     {
         if (!_nextEnabled) return;
 
-        var normalized = _typedAnswer.Trim().ToLowerInvariant();
+        var normalized    = _typedAnswer.Trim().ToLowerInvariant();
         bool isLastQuestion = _currentIndex == _questions.Count - 1;
 
-        // Last question: compare against the live quote (case-insensitive, trimmed)
+        // ── Validate ───────────────────────────────────────────────────────────
         bool correct = isLastQuestion
-            ? normalized == QuoteService.CurrentQuote.Trim().ToLowerInvariant()
+            ? normalized == GetNormalizedQuote()
             : _questions[_currentIndex].Accepted.Contains(normalized);
 
         if (!correct)
         {
             _errorMessage = "That is not a valid answer, please try again.";
+            return;
+        }
+
+        // ── Early-exit checks ──────────────────────────────────────────────────
+        /*
+         * Q3 "urge": the user has admitted they are acting on impulse.
+         *            Cancel the flow so the site is not unblocked.
+         * Q4 "no":   the user has said they do NOT really want to do this.
+         *            Cancel the flow for the same reason.
+         * Both are valid answers that pass validation — the exit is intentional,
+         * not a punishment. The user can re-open the flow whenever they like.
+         */
+        if (_currentIndex == 2 && normalized == "urge")
+        {
+            await OnCancelled.InvokeAsync();
+            return;
+        }
+
+        if (_currentIndex == 3 && normalized == "no")
+        {
+            await OnCancelled.InvokeAsync();
             return;
         }
 
@@ -168,7 +250,6 @@
 
         if (_currentIndex >= _questions.Count)
         {
-            // All questions answered correctly — notify parent
             await OnFlowCompleted.InvokeAsync();
             return;
         }
@@ -185,17 +266,29 @@
             await OnNextClickedAsync();
     }
 
-    // ── Hint ───────────────────────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     /*
      * GetHint()
-     * For questions 1-4: shows the accepted answers joined by " · "
-     * For the final quote question: shows a fixed prompt instead
+     * Q1–Q4: the accepted answers joined by " · " so the user knows what to type.
+     * Q5:    a plain instruction — the quote is displayed in the box above the input.
      */
     private string GetHint()
         => _currentIndex == _questions.Count - 1
-            ? "Enter today's inspirational quote exactly as shown on the home screen"
+            ? "Type the full quote above to continue"
             : string.Join(" · ", _questions[_currentIndex].Accepted);
+
+    /*
+     * GetNormalizedQuote()
+     * Strips the typographic quotation marks that wrap each quote in QuoteService
+     * before comparing, so the user only needs to type the plain text content.
+     * Both the stored quote and the typed answer are trimmed and lowercased.
+     */
+    private string GetNormalizedQuote()
+        => QuoteService.CurrentQuote
+            .Replace("\"", "")
+            .Trim()
+            .ToLowerInvariant();
 
     // ── Cleanup ────────────────────────────────────────────────────────────────
 

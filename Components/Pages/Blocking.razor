@@ -1,4 +1,4 @@
-﻿@page "/blocking"
+@page "/blocking"
 @using Nimbus_Internet_Blocker.Models
 @inject PresetService PresetService
 @inject CustomSitesService CustomSitesService
@@ -7,7 +7,7 @@
 @inject IPasswordService PasswordService
 
 <div class="blocking-page">
-    <!-- Page header (like Home) -->
+    <!-- Page header -->
     <div class="hero">
         <h1 class="h1">Blocking</h1>
         <p class="subhead">
@@ -136,7 +136,7 @@
         <button class="btn btn-primary apply-btn"
                 type="button"
                 disabled="@(_isApplying || !HostsFileService.IsElevated)"
-                @onclick="ApplyBlockingAsync">
+                @onclick="OnApplyClicked">
             @if (_isApplying)
             {
                 <span>Applying…</span>
@@ -147,18 +147,53 @@
             }
         </button>
     </div>
+
+    <!-- Apply status message — green on success, red on failure, cleared on any change -->
+    @if (!string.IsNullOrEmpty(_applyStatusMessage))
+    {
+        <div class="apply-status-row">
+            <span class="@(_changesApplied ? "apply-status apply-status-success" : "apply-status apply-status-error")">
+                @_applyStatusMessage
+            </span>
+        </div>
+    }
+
+    <UnlockModal IsVisible="_showUnlockModal"
+                 OnUnlocked="OnUnlocked"
+                 OnCancelled="OnModalCancelled" />
 </div>
 
 @code {
+    // ── State ──────────────────────────────────────────────────────────────────
+
     private PresetsRoot? _presets;
     private int _categoryCount;
 
     private CustomsRoot? _customRoot;
-    private string _customInput = "";
-    private bool _customOpen = true;
+    private string _customInput  = "";
+    private bool   _customOpen   = true;
     private string _customMessage = "";
 
-    private bool _isApplying = false;
+    private bool _isApplying      = false;
+    private bool _showUnlockModal = false;
+
+    /*
+     * _preApplySnapshot stores a deep copy of _presets taken just before the
+     * unlock modal is shown. If the user cancels without authenticating, the
+     * snapshot is restored so toggle positions visually revert to the last
+     * applied state rather than showing unapplied pending changes.
+     */
+    private PresetsRoot? _preApplySnapshot = null;
+
+    /*
+     * _applyStatusMessage and _changesApplied drive the small status line
+     * shown below the Apply button. Both are cleared whenever the user modifies
+     * any category or custom site so stale success/failure text never lingers.
+     */
+    private string _applyStatusMessage = "";
+    private bool   _changesApplied     = false;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,8 +203,12 @@
         _customRoot = await CustomSitesService.LoadAsync();
     }
 
+    // ── Category Management ────────────────────────────────────────────────────
+
     private async Task OnCategoryChangedAsync(string name)
     {
+        ClearApplyStatus();
+
         if (_presets is null) return;
         if (!_presets.Categories.TryGetValue(name, out var cat)) return;
 
@@ -177,8 +216,11 @@
         await PresetService.SaveAsync(_presets);
     }
 
+    // ── Custom Sites ───────────────────────────────────────────────────────────
+
     private async Task AddCustomAsync()
     {
+        ClearApplyStatus();
         _customMessage = "";
 
         if (_customRoot == null)
@@ -186,7 +228,7 @@
 
         var (success, message, updatedRoot) = await CustomSitesService.AddCustomSite(_customInput);
 
-        _customRoot = updatedRoot;
+        _customRoot    = updatedRoot;
         _customMessage = message;
 
         if (success)
@@ -195,6 +237,8 @@
 
     private async Task RemoveCustomAsync(string host)
     {
+        ClearApplyStatus();
+
         var (success, message, updatedRoot) = await CustomSitesService.RemoveCustomSiteAsync(host);
 
         _customRoot = updatedRoot;
@@ -207,6 +251,8 @@
 
     private async Task ToggleCustomEnabledAsync(CustomEntry site, ChangeEventArgs e)
     {
+        ClearApplyStatus();
+
         if (_customRoot is null) return;
 
         bool newValue = false;
@@ -226,16 +272,141 @@
             await AddCustomAsync();
     }
 
-    private async Task ApplyBlockingAsync()
+    // ── Apply Logic ────────────────────────────────────────────────────────────
+
+    /*
+     * OnApplyClicked()
+     * Single entry point for the Apply Blocking Rules button.
+     *
+     * No protection configured → applies directly with Applying… state.
+     *
+     * Guardian or Accountability mode active → saves a snapshot of the current
+     * presets so OnModalCancelled can restore toggle positions, then opens the
+     * unlock modal. The actual ApplyAsync call happens only after the user
+     * successfully authenticates via OnUnlocked().
+     */
+    private async Task OnApplyClicked()
     {
         if (_isApplying) return;
 
-        _isApplying = true;
-        StateHasChanged(); // Show "Applying…" and disable the button immediately
+        bool needsAuth = PasswordService.IsPasswordEnabled()
+                      || PasswordService.IsAccountabilityModeActive();
 
-        await HostsFileService.ApplyAsync();
+        if (!needsAuth)
+        {
+            _isApplying = true;
+            StateHasChanged();
+
+            try
+            {
+                await HostsFileService.ApplyAsync();
+                _applyStatusMessage = "Changes applied successfully";
+                _changesApplied     = true;
+            }
+            catch
+            {
+                _applyStatusMessage = "Failed to apply changes, please try again";
+                _changesApplied     = false;
+            }
+
+            _isApplying = false;
+            return;
+        }
+
+        // Take snapshot before showing the modal so we can restore on cancel
+        _preApplySnapshot = DeepCopy(_presets);
+        _showUnlockModal  = true;
+        StateHasChanged();
+    }
+
+    /*
+     * OnUnlocked()
+     * Called by UnlockModal when the user passes authentication.
+     * Clears the snapshot (auth succeeded — no restore needed), closes the modal,
+     * then performs the actual apply wrapped in try/catch for status feedback.
+     */
+    private async Task OnUnlocked()
+    {
+        _showUnlockModal  = false;
+        _preApplySnapshot = null;
+        _isApplying       = true;
+        StateHasChanged();
+
+        try
+        {
+            await HostsFileService.ApplyAsync();
+            _applyStatusMessage = "Changes applied successfully";
+            _changesApplied     = true;
+        }
+        catch
+        {
+            _applyStatusMessage = "Failed to apply changes, please try again";
+            _changesApplied     = false;
+        }
 
         _isApplying = false;
-        // Blazor re-renders automatically after the event handler returns
+    }
+
+    /*
+     * OnModalCancelled()
+     * Called by UnlockModal when the user dismisses without authenticating.
+     * If a snapshot was saved, restores _presets from it so all toggles visually
+     * revert to the state at the last successful apply. This prevents the UI from
+     * showing unapplied pending changes after the user backs out.
+     */
+    private void OnModalCancelled()
+    {
+        _showUnlockModal = false;
+
+        if (_preApplySnapshot is not null)
+        {
+            _presets          = _preApplySnapshot;
+            _preApplySnapshot = null;
+            StateHasChanged();
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /*
+     * ClearApplyStatus()
+     * Resets the status line below the Apply button. Called at the start of
+     * every operation that modifies the blocking state so stale success or
+     * failure messages never linger after the user makes further changes.
+     */
+    private void ClearApplyStatus()
+    {
+        _applyStatusMessage = "";
+        _changesApplied     = false;
+    }
+
+    /*
+     * DeepCopy()
+     * Produces an independent copy of a PresetsRoot so mutations to _presets
+     * after the snapshot is taken do not corrupt the snapshot.
+     * Uses explicit LINQ projection rather than JSON round-trip to avoid
+     * needing a System.Text.Json namespace in the component.
+     */
+    private static PresetsRoot? DeepCopy(PresetsRoot? source)
+    {
+        if (source is null) return null;
+
+        return new PresetsRoot
+        {
+            Categories = source.Categories.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new PresetCategory
+                {
+                    Enabled = kvp.Value.Enabled,
+                    Entries = kvp.Value.Entries
+                        .Select(e => new PresetEntry
+                        {
+                            Host = e.Host,
+                            Ipv4 = e.Ipv4,
+                            Ipv6 = e.Ipv6
+                        })
+                        .ToList()
+                })
+        };
     }
 }

@@ -1,13 +1,12 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using System.Security.Cryptography;
 
 namespace Nimbus_Internet_Blocker.Services
 {
     /*
      * RecoveryMode enum
-     * Defines the two recovery modes available to the user
-     * Accountability = Answer 5 questions + quote of the day
-     * Guardian       = Transcribe a one-time generated hash code
+     * Accountability = Answer 5 questions + type today's quote — no password required.
+     * Guardian       = Transcribe a one-time hash stored with a trusted contact.
      */
     public enum RecoveryMode
     {
@@ -19,57 +18,78 @@ namespace Nimbus_Internet_Blocker.Services
     {
         // ── Preference Keys ────────────────────────────────────────────────────
         /*
-         * These are the keys used to store and retrieve values from MAUI Preferences
-         * Preferences is a built-in MAUI key-value store that persists between app sessions
-         * Think of it like a dictionary that never forgets
+         * All state lives in MAUI Preferences — a built-in key/value store that
+         * persists between app sessions on the device. Think of it as a typed
+         * dictionary that never forgets.
          */
-        private const string PREF_HASH = "nimbus_password_hash";     // Stores the hashed password string
-        private const string PREF_ENABLED = "nimbus_password_enabled";  // Stores whether a password is set
-        private const string PREF_RECOVERY = "nimbus_recovery_mode";     // Stores the chosen recovery mode
+        private const string PREF_HASH           = "nimbus_password_hash";
+        private const string PREF_ENABLED        = "nimbus_password_enabled";
+        private const string PREF_ACCOUNTABILITY = "nimbus_accountability_active";
+        private const string PREF_RECOVERY       = "nimbus_recovery_mode";
 
-        // ── Password State ─────────────────────────────────────────────────────
+        // ── Mode State ─────────────────────────────────────────────────────────
 
         /*
          * IsPasswordEnabled()
-         * Checks if the user has set up a password
-         * Returns false by default if the key has never been set
+         * True only when Guardian mode is active — a hash has been stored.
+         * False for Accountability mode and when nothing is configured.
          */
         public bool IsPasswordEnabled()
             => Preferences.Get(PREF_ENABLED, false);
 
         /*
+         * IsAccountabilityModeActive()
+         * True when the user has chosen Accountability mode.
+         * In this state there is no password — the unlock path goes through questions.
+         */
+        public bool IsAccountabilityModeActive()
+            => Preferences.Get(PREF_ACCOUNTABILITY, false);
+
+        /*
          * GetRecoveryMode()
-         * Reads the stored recovery mode string from Preferences and converts
-         * it back into the RecoveryMode enum. Defaults to Accountability if
-         * the value is missing or unrecognized
+         * Reads the active mode from Preferences.
+         * Checks the accountability flag first because it is the authoritative source
+         * for that mode — the PREF_RECOVERY string is a secondary record.
          */
         public RecoveryMode GetRecoveryMode()
         {
-            var stored = Preferences.Get(PREF_RECOVERY, "Accountability");
-            return Enum.TryParse<RecoveryMode>(stored, out var mode) ? mode : RecoveryMode.Accountability;
+            if (IsAccountabilityModeActive()) return RecoveryMode.Accountability;
+
+            var stored = Preferences.Get(PREF_RECOVERY, nameof(RecoveryMode.Guardian));
+            return Enum.TryParse<RecoveryMode>(stored, out var mode)
+                ? mode
+                : RecoveryMode.Guardian;
+        }
+
+        // ── Mode Setup ─────────────────────────────────────────────────────────
+
+        /*
+         * SetAccountabilityModeAsync()
+         * Activates Accountability mode by writing only the flag.
+         * Clears any existing Guardian hash so the two modes cannot coexist.
+         * IsPasswordEnabled() will return false after this call.
+         */
+        public Task SetAccountabilityModeAsync()
+        {
+            Preferences.Remove(PREF_HASH);
+            Preferences.Set(PREF_ENABLED, false);
+            Preferences.Set(PREF_ACCOUNTABILITY, true);
+            Preferences.Set(PREF_RECOVERY, nameof(RecoveryMode.Accountability));
+            return Task.CompletedTask;
         }
 
         /*
-         * SetRecoveryMode()
-         * Saves the chosen recovery mode to Preferences as a string
-         * Called from the Settings page when the user picks their recovery method
-         */
-        public void SetRecoveryMode(RecoveryMode mode)
-            => Preferences.Set(PREF_RECOVERY, mode.ToString());
-
-        // ── Password Management ────────────────────────────────────────────────
-
-        /*
          * SetPasswordAsync()
-         * Validates the new password against all rules, hashes it using
-         * PasswordHasher<string> (PBKDF2 with random salt), and stores
-         * the resulting hash string in Preferences
+         * Guardian mode only. Validates the password against all rules,
+         * hashes it using PasswordHasher<string> (PBKDF2 with random salt),
+         * and stores the resulting hash string in Preferences.
+         * Always records the mode as Guardian and clears the accountability flag.
          *
-         * Returns (true, success message) or (false, error message)
-         * Never throws — all failures come back as a false result with a message
+         * Returns (true, success message) or (false, validation error message).
+         * Never throws — all failures come back as a false result.
          */
         public Task<(bool success, string message)> SetPasswordAsync(
-            string password, string confirmPassword, RecoveryMode recoveryMode)
+            string password, string confirmPassword)
         {
             // ── Validation ─────────────────────────────────────────────────────
 
@@ -79,47 +99,44 @@ namespace Nimbus_Internet_Blocker.Services
             if (password.Length < 8)
                 return Task.FromResult((false, "Password must be at least 8 characters."));
 
-            // Any() checks if at least one character satisfies the condition
-            // All() would require every character to satisfy it which is wrong here
             if (!password.Any(char.IsLetter))
                 return Task.FromResult((false, "Password must contain at least one letter."));
 
             if (!password.Any(char.IsDigit))
                 return Task.FromResult((false, "Password must contain at least one number."));
 
-            // If every character is a letter or digit then there are no special characters
             if (password.All(char.IsLetterOrDigit))
                 return Task.FromResult((false, "Password must contain at least one special character."));
 
             // ── Hashing ────────────────────────────────────────────────────────
             /*
-             * PasswordHasher uses PBKDF2 with a random salt internally
-             * The salt and hash are combined into one Base64 string automatically
-             * "nimbus" is the user object — we don't have real user objects so
-             * we pass a constant string as a stand-in
+             * PasswordHasher uses PBKDF2 with a cryptographically random salt.
+             * The salt and derived key are combined into one Base64 string automatically.
+             * "nimbus" is the user object stand-in — we have no real identity objects.
              */
             var hash = new PasswordHasher<string>().HashPassword("nimbus", password);
 
-            // ── Save to Preferences ────────────────────────────────────────────
+            // ── Persist ────────────────────────────────────────────────────────
             Preferences.Set(PREF_HASH, hash);
             Preferences.Set(PREF_ENABLED, true);
-            Preferences.Set(PREF_RECOVERY, recoveryMode.ToString());
+            Preferences.Set(PREF_ACCOUNTABILITY, false);   // clear accountability flag
+            Preferences.Set(PREF_RECOVERY, nameof(RecoveryMode.Guardian));
 
             return Task.FromResult((true, "Password set successfully."));
         }
 
+        // ── Password Operations ────────────────────────────────────────────────
+
         /*
          * VerifyPassword()
-         * Hashes the attempt using the same salt stored in the hash string
+         * Re-hashes the attempt using the salt embedded in the stored hash string
          * and compares the result. Returns true if they match, false otherwise.
          *
          * SuccessRehashNeeded means the password matched but was hashed with
-         * older parameters — we treat it as a success since we are not
-         * upgrading hashes in this version
+         * older PBKDF2 parameters — treated as success; we do not upgrade hashes here.
          */
         public bool VerifyPassword(string attempt)
         {
-            // If no password is set there is nothing to verify
             if (!IsPasswordEnabled()) return false;
 
             var storedHash = Preferences.Get(PREF_HASH, string.Empty);
@@ -133,15 +150,16 @@ namespace Nimbus_Internet_Blocker.Services
 
         /*
          * ClearPasswordAsync()
-         * Removes the password hash and resets the enabled flag
-         * Called from Settings when the user removes their password
-         * Sets PREF_ENABLED to false rather than removing it so
-         * IsPasswordEnabled() always has a value to read
+         * Wipes all protection state from Preferences.
+         * Sets PREF_ENABLED and PREF_ACCOUNTABILITY to false (rather than removing)
+         * so the boolean reads always have a default to fall back on.
+         * After this call IsPasswordEnabled() and IsAccountabilityModeActive() both return false.
          */
         public Task ClearPasswordAsync()
         {
             Preferences.Remove(PREF_HASH);
             Preferences.Set(PREF_ENABLED, false);
+            Preferences.Set(PREF_ACCOUNTABILITY, false);
             Preferences.Remove(PREF_RECOVERY);
             return Task.CompletedTask;
         }
@@ -150,25 +168,26 @@ namespace Nimbus_Internet_Blocker.Services
 
         /*
          * GenerateGuardianHash()
-         * Generates a cryptographically random hash in the format:
+         * Produces a cryptographically random recovery code in the format:
          * xxxxxx-xxxxxx-xxxxxx-xxxxxx
-         * Each segment is 6 characters and guaranteed to contain at least
-         * one lowercase letter, one uppercase letter, one digit, and one
-         * special character — then shuffled so the order is unpredictable
          *
-         * Uses RandomNumberGenerator (cryptographically secure) not System.Random
-         * This hash is NEVER stored — it is shown once and discarded
+         * Each 6-character segment is guaranteed to contain at least one lowercase
+         * letter, one uppercase letter, one digit, and one special character.
+         * The characters are then shuffled so the guaranteed positions are unpredictable.
+         *
+         * Uses RandomNumberGenerator (CSPRNG) — never System.Random.
+         * This hash is NEVER stored — shown once during setup and discarded.
          */
         public string GenerateGuardianHash()
         {
             const string lowercase = "abcdefghijklmnopqrstuvwxyz";
             const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            const string numbers = "0123456789";
-            const string special = "!@#$%^&*()";
-            const string all = lowercase + uppercase + numbers + special; // Full pool for remaining spots
+            const string numbers   = "0123456789";
+            const string special   = "!@#$%^&*()";
+            const string all       = lowercase + uppercase + numbers + special;
 
             const int segmentLength = 6;
-            const int segmentCount = 4;
+            const int segmentCount  = 4;
 
             var segments = new string[segmentCount];
 
@@ -176,24 +195,18 @@ namespace Nimbus_Internet_Blocker.Services
             {
                 var chars = new char[segmentLength];
 
-                // Guarantee one of each character type in every segment
                 chars[0] = lowercase[RandomNumberGenerator.GetInt32(lowercase.Length)];
                 chars[1] = numbers[RandomNumberGenerator.GetInt32(numbers.Length)];
                 chars[2] = uppercase[RandomNumberGenerator.GetInt32(uppercase.Length)];
                 chars[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
-
-                // Fill the remaining 2 spots from the full combined pool
                 chars[4] = all[RandomNumberGenerator.GetInt32(all.Length)];
                 chars[5] = all[RandomNumberGenerator.GetInt32(all.Length)];
 
-                // Shuffle so the guaranteed characters are not always in the same positions
                 RandomNumberGenerator.Shuffle(chars.AsSpan());
 
                 segments[i] = new string(chars);
             }
 
-            // Join the 4 segments with a dash separator
-            // Example output: mXq3!a-B9@kRz-7#wPnE-Ld&2Yf
             return string.Join("-", segments);
         }
     }

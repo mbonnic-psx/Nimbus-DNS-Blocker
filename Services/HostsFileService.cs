@@ -1,5 +1,6 @@
 using Nimbus_Internet_Blocker.Models;
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Text;
 
@@ -8,6 +9,7 @@ namespace Nimbus_Internet_Blocker.Services;
 /// <summary>
 /// Reads, writes, and manages the Nimbus-managed section of the Windows hosts file.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class HostsFileService : IHostsFileService
 {
     // ── File paths ─────────────────────────────────────────────────────────────

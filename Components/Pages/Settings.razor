@@ -13,69 +13,104 @@
     <!-- ── Password Protection ─────────────────────────────────────────────── -->
     <div class="card card-pad pw-section">
 
-        @if (!_passwordEnabled)
+        @if (!_passwordEnabled && !_accountabilityActive)
         {
-            <!-- ══ NO PASSWORD SET — Set Password Form ══════════════════════ -->
+            <!-- ══ NOTHING SET — Mode picker ════════════════════════════════ -->
 
-            <h2 class="pw-heading">Set Up Password Protection</h2>
+            <h2 class="pw-heading">Choose Protection Mode</h2>
 
-            <!-- New password inputs -->
-            <div class="pw-field-group">
-                <input class="input"
-                       type="password"
-                       placeholder="New password"
-                       autocomplete="new-password"
-                       @bind="_newPassword"
-                       @bind:event="oninput" />
-
-                <input class="input"
-                       type="password"
-                       placeholder="Confirm password"
-                       autocomplete="new-password"
-                       @bind="_confirmPassword"
-                       @bind:event="oninput" />
-            </div>
-
-            <!-- Recovery mode picker -->
-            <div class="pw-mode-label">Recovery Mode</div>
-
+            <!-- Mode selection cards -->
             <div class="pw-mode-grid">
                 <button class="pw-mode-option @(_selectedMode == RecoveryMode.Accountability ? "active" : "")"
                         type="button"
-                        @onclick="() => _selectedMode = RecoveryMode.Accountability">
+                        @onclick="OnAccountabilityModeSelected">
                     <div class="pw-mode-title">Accountability Mode</div>
-                    <div class="pw-mode-subtitle">Answer 5 grounding questions and today's quote</div>
+                    <div class="pw-mode-subtitle">
+                        Answer 5 grounding questions to apply changes. No password required.
+                    </div>
                 </button>
 
                 <button class="pw-mode-option @(_selectedMode == RecoveryMode.Guardian ? "active" : "")"
                         type="button"
-                        @onclick="() => _selectedMode = RecoveryMode.Guardian">
+                        @onclick="OnGuardianModeSelected">
                     <div class="pw-mode-title">Guardian Mode</div>
-                    <div class="pw-mode-subtitle">Transcribe a one-time generated code</div>
+                    <div class="pw-mode-subtitle">
+                        Set a password and give a one-time recovery code to a trusted person.
+                    </div>
                 </button>
             </div>
 
-            <button class="btn btn-primary pw-action-btn"
+            <!-- ── Accountability setup ────────────────────────────────────── -->
+            @if (_selectedMode == RecoveryMode.Accountability)
+            {
+                <button class="btn btn-primary pw-action-btn"
+                        type="button"
+                        @onclick="ActivateAccountabilityModeAsync">
+                    Activate Accountability Mode
+                </button>
+            }
+
+            <!-- ── Guardian setup ─────────────────────────────────────────── -->
+            else if (_selectedMode == RecoveryMode.Guardian)
+            {
+                <!-- One-time recovery hash — generated on mode selection, shown once only -->
+                <div class="gf-hash-box">
+                    <div class="gf-hash-text">@_guardianHash</div>
+                </div>
+
+                <div class="pw-guardian-warning">
+                    Do not forget this code. After this moment you will never see it again.
+                    Give it to your guardian now.
+                </div>
+
+                <!-- Password inputs -->
+                <div class="pw-field-group">
+                    <input class="input"
+                           type="password"
+                           placeholder="New password"
+                           autocomplete="new-password"
+                           @bind="_newPassword"
+                           @bind:event="oninput" />
+
+                    <input class="input"
+                           type="password"
+                           placeholder="Confirm password"
+                           autocomplete="new-password"
+                           @bind="_confirmPassword"
+                           @bind:event="oninput" />
+                </div>
+
+                <button class="btn btn-primary pw-action-btn"
+                        type="button"
+                        @onclick="SetPasswordAsync">
+                    Set Password
+                </button>
+            }
+        }
+
+        else if (_accountabilityActive)
+        {
+            <!-- ══ ACCOUNTABILITY MODE ACTIVE ════════════════════════════════ -->
+
+            <h2 class="pw-heading">Accountability Mode Active</h2>
+
+            <div class="pw-status-row">
+                <span class="pw-status-label">To apply blocking rules you must answer</span>
+                <span class="pw-status-value">5 questions</span>
+            </div>
+
+            <button class="btn btn-danger pw-action-btn"
                     type="button"
-                    @onclick="SetPasswordAsync">
-                Set Password
+                    @onclick="OnRemovePasswordClicked">
+                Deactivate
             </button>
         }
+
         else
         {
-            <!-- ══ PASSWORD IS SET — Password Management ═════════════════════ -->
+            <!-- ══ GUARDIAN MODE ACTIVE ══════════════════════════════════════ -->
 
-            <h2 class="pw-heading">Password Protection Active</h2>
-
-            <!-- Current recovery mode — read only -->
-            <div class="pw-status-row">
-                <span class="pw-status-label">Recovery Mode:</span>
-                <span class="pw-status-value">
-                    @(PasswordService.GetRecoveryMode() == RecoveryMode.Accountability
-                        ? "Accountability"
-                        : "Guardian")
-                </span>
-            </div>
+            <h2 class="pw-heading">Guardian Mode Active</h2>
 
             <hr class="pw-divider" />
 
@@ -118,96 +153,140 @@
 
             <h3 class="pw-subheading">Remove Password</h3>
 
-            @if (!_showRemoveConfirmation)
-            {
-                <button class="btn btn-danger pw-action-btn"
-                        type="button"
-                        @onclick="() => _showRemoveConfirmation = true">
-                    Remove Password
-                </button>
-            }
-            else
-            {
-                <div class="pw-remove-confirmation">
-                    <div class="pw-remove-warning">
-                        Are you sure? This will remove all password protection.
-                    </div>
-                    <div class="pw-remove-actions">
-                        <button class="btn btn-danger"
-                                type="button"
-                                @onclick="ConfirmRemovePasswordAsync">
-                            Confirm
-                        </button>
-                        <button class="btn btn-ghost"
-                                type="button"
-                                @onclick="() => _showRemoveConfirmation = false">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            }
+            <button class="btn btn-danger pw-action-btn"
+                    type="button"
+                    @onclick="OnRemovePasswordClicked">
+                Remove Password
+            </button>
         }
 
     </div>
+
+    <UnlockModal IsVisible="_showUnlockModal"
+                 OnUnlocked="OnRemovePasswordUnlocked"
+                 OnCancelled="OnModalCancelled" />
 
 </div>
 
 @code {
     // ── State ──────────────────────────────────────────────────────────────────
 
-    private string _newPassword          = "";
-    private string _confirmPassword      = "";
-    private string _currentPassword      = "";
-    private RecoveryMode _selectedMode   = RecoveryMode.Accountability;
-    private bool _showRemoveConfirmation = false;
-    private bool _passwordEnabled        = false;
+    private string _newPassword        = "";
+    private string _confirmPassword    = "";
+    private string _currentPassword    = "";
+
+    /*
+     * _selectedMode starts null so neither card is pre-selected on the mode
+     * picker — the user must make an active choice before anything is shown.
+     */
+    private RecoveryMode? _selectedMode  = null;
+    private string _guardianHash         = "";
+
+    private bool _showUnlockModal      = false;
+    private bool _passwordEnabled      = false;
+    private bool _accountabilityActive = false;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     protected override void OnInitialized()
     {
-        _passwordEnabled = PasswordService.IsPasswordEnabled();
+        _passwordEnabled      = PasswordService.IsPasswordEnabled();
+        _accountabilityActive = PasswordService.IsAccountabilityModeActive();
     }
 
-    // ── Set Password ───────────────────────────────────────────────────────────
+    // ── Mode Selection ─────────────────────────────────────────────────────────
+
+    /*
+     * OnAccountabilityModeSelected()
+     * Selects Accountability mode on the picker. No hash is generated here
+     * because Accountability mode never uses a password or a hash code.
+     */
+    private void OnAccountabilityModeSelected()
+    {
+        _selectedMode = RecoveryMode.Accountability;
+        _guardianHash = "";
+    }
+
+    /*
+     * OnGuardianModeSelected()
+     * Selects Guardian mode on the picker AND immediately generates the
+     * one-time recovery hash. Generating it here (not at save-time) ensures
+     * the user sees it as soon as they commit to Guardian mode, giving them
+     * time to write it down before they set the password.
+     *
+     * A fresh hash is generated each time the user clicks Guardian, so
+     * switching back and forth produces different codes each time.
+     */
+    private void OnGuardianModeSelected()
+    {
+        _selectedMode = RecoveryMode.Guardian;
+        _guardianHash = PasswordService.GenerateGuardianHash();
+    }
+
+    // ── Mode Activation ────────────────────────────────────────────────────────
+
+    /*
+     * ActivateAccountabilityModeAsync()
+     * Writes only the accountability flag — no password hash is ever stored.
+     * After this call, every "Apply Changes" click in Blocking.razor will
+     * open the UnlockModal which routes to the 5-question AccountabilityFlow.
+     */
+    private async Task ActivateAccountabilityModeAsync()
+    {
+        await PasswordService.SetAccountabilityModeAsync();
+        Snackbar.Success("Mode activated", "Accountability mode activated.");
+
+        _passwordEnabled      = PasswordService.IsPasswordEnabled();
+        _accountabilityActive = PasswordService.IsAccountabilityModeActive();
+        _selectedMode         = null;
+        StateHasChanged();
+    }
 
     /*
      * SetPasswordAsync()
-     * Delegates validation and hashing entirely to PasswordService.
-     * Snackbars the returned message whether it succeeded or not so the
-     * user always gets feedback (e.g. "Password must be at least 8 characters").
-     * On success: clears both inputs, refreshes the enabled flag, and forces
-     * a re-render so the management view replaces the set-password form.
+     * Guardian mode setup. Delegates all validation and hashing to PasswordService.
+     * Snackbars the returned message whether it succeeded or not so the user
+     * always gets feedback (e.g. "Password must be at least 8 characters").
+     * On success: clears inputs, hides the hash, refreshes both mode flags,
+     * and forces a re-render so the management view replaces the setup form.
      */
     private async Task SetPasswordAsync()
     {
-        var (success, message) = await PasswordService.SetPasswordAsync(
-            _newPassword, _confirmPassword, _selectedMode);
-
-        if (success)
-            Snackbar.Success("Password set", message);
-        else
-            Snackbar.Error("Failed to set password", message);
-
-        if (success)
+        try
         {
-            _newPassword     = "";
-            _confirmPassword = "";
-            _passwordEnabled = PasswordService.IsPasswordEnabled();
-            StateHasChanged();
+            var (success, message) = await PasswordService.SetPasswordAsync(
+                _newPassword, _confirmPassword);
+
+            if (success)
+                Snackbar.Success("Password set", message);
+            else
+                Snackbar.Error("Failed to set password", message);
+
+            if (success)
+            {
+                _newPassword          = "";
+                _confirmPassword      = "";
+                _guardianHash         = "";
+                _selectedMode         = null;
+                _passwordEnabled      = PasswordService.IsPasswordEnabled();
+                _accountabilityActive = PasswordService.IsAccountabilityModeActive();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Error("Unexpected error", ex.Message);
         }
     }
 
-    // ── Change Password ────────────────────────────────────────────────────────
+    // ── Guardian Password Management ───────────────────────────────────────────
 
     /*
      * ChangePasswordAsync()
      * Verifies the current password first so an attacker who walks up to an
-     * unlocked machine cannot silently swap the password.
-     *
-     * Passes GetRecoveryMode() — not _selectedMode — into SetPasswordAsync so
-     * the existing recovery mode is preserved when only the password is changed.
-     * The user would have to go through Remove + Set again to change their mode.
+     * unlocked machine cannot silently replace the password.
+     * Uses SetPasswordAsync(string, string) — no mode parameter — because
+     * changing the password always preserves Guardian mode.
      */
     private async Task ChangePasswordAsync()
     {
@@ -219,7 +298,7 @@
         }
 
         var (success, message) = await PasswordService.SetPasswordAsync(
-            _newPassword, _confirmPassword, PasswordService.GetRecoveryMode());
+            _newPassword, _confirmPassword);
 
         if (success)
             Snackbar.Success("Password changed", message);
@@ -234,20 +313,54 @@
         }
     }
 
-    // ── Remove Password ────────────────────────────────────────────────────────
+    // ── Deactivate / Remove ────────────────────────────────────────────────────
 
     /*
-     * ConfirmRemovePasswordAsync()
-     * Called only after the user clicks Confirm in the inline confirmation box.
-     * Clears all stored password data via ClearPasswordAsync(), then refreshes
-     * the enabled flag and forces a re-render to swap back to the set-password form.
+     * OnRemovePasswordClicked()
+     * Shared entry point for both "Deactivate" (Accountability) and
+     * "Remove Password" (Guardian). Opens the UnlockModal so the user must
+     * pass authentication before any data is cleared.
+     *
+     * In Accountability mode: IsPasswordEnabled() is false, so UnlockModal
+     * will eventually route through AccountabilityFlow (via "Forgot password?").
+     * In Guardian mode:  UnlockModal shows the standard password entry.
      */
-    private async Task ConfirmRemovePasswordAsync()
+    private void OnRemovePasswordClicked()
     {
-        await PasswordService.ClearPasswordAsync();
-        Snackbar.Success("Password removed", "Password removed successfully.");
-        _passwordEnabled        = PasswordService.IsPasswordEnabled();
-        _showRemoveConfirmation = false;
+        _showUnlockModal = true;
         StateHasChanged();
+    }
+
+    /*
+     * OnRemovePasswordUnlocked()
+     * Called by UnlockModal after the user passes authentication.
+     * Detects which mode was active BEFORE clearing so it can show the
+     * correct snackbar message after ClearPasswordAsync() wipes the flags.
+     */
+    private async Task OnRemovePasswordUnlocked()
+    {
+        _showUnlockModal = false;
+
+        bool wasAccountability = PasswordService.IsAccountabilityModeActive();
+
+        await PasswordService.ClearPasswordAsync();
+
+        if (wasAccountability)
+            Snackbar.Success("Mode deactivated", "Accountability mode deactivated.");
+        else
+            Snackbar.Success("Password removed", "Password removed successfully.");
+
+        _passwordEnabled      = PasswordService.IsPasswordEnabled();
+        _accountabilityActive = PasswordService.IsAccountabilityModeActive();
+        StateHasChanged();
+    }
+
+    /*
+     * OnModalCancelled()
+     * Called by UnlockModal when the user dismisses without authenticating.
+     */
+    private void OnModalCancelled()
+    {
+        _showUnlockModal = false;
     }
 }
