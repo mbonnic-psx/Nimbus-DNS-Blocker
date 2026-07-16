@@ -255,7 +255,7 @@
         try
         {
             var (success, message) = await PasswordService.SetPasswordAsync(
-                _newPassword, _confirmPassword);
+                _newPassword, _confirmPassword, _guardianHash);
 
             if (success)
                 Snackbar.Success("Password set", message);

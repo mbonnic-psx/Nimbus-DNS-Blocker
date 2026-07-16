@@ -22,7 +22,7 @@ Rules of the road:
 Fix the verified bugs before anything new. All are listed with detail in CLAUDE.md
 "Known Bugs / Tech Debt".
 
-- [ ] **Guardian recovery fix** — at setup, hash the recovery code (PBKDF2, same
+- [x] **Guardian recovery fix** — at setup, hash the recovery code (PBKDF2, same
       machinery as the password) and store the hash in Preferences; `GuardianFlow`
       verifies the *typed* code against that stored hash instead of generating a fresh
       one on screen. (~1 day; the single worst flaw in the app)
@@ -78,6 +78,12 @@ the release: "blocks sites even with Secure DNS enabled."
 - [ ] Tag **v1.0** on GitHub with binaries.
 - [ ] Decide and document the license (open-core is the default assumption: free app
       stays open, paid tamper-resistance is closed).
+
+## Release Notes
+
+- Guardian recovery verification changed: guardian users who set up before this build
+  must remove and re-add Guardian mode to get a verifiable recovery code; old recovery
+  codes were never stored and cannot be verified.
 
 ### Phase 4 — Funnel (non-code, ongoing)
 

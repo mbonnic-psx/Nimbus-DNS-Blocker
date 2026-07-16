@@ -3,18 +3,14 @@
 
 <div class="gf-container">
 
-    <!-- Warning banner -->
+    <!-- Instruction banner -->
     <div class="gf-warning">
-        This code will not be shown again. Type it exactly including the dashes.
-    </div>
-
-    <!-- Generated hash display — shown once, never stored elsewhere -->
-    <div class="gf-hash-box">
-        <div class="gf-hash-text">@_generatedHash</div>
+        Enter the recovery code you saved when you set up Guardian mode.
+        Your guardian has a copy of this code.
     </div>
 
     <!-- Input label -->
-    <div class="gf-input-label">Type the code above to confirm</div>
+    <div class="gf-input-label">Recovery code</div>
 
     <!-- Answer input — paste is disabled via JS interop in OnAfterRenderAsync -->
     <input class="input gf-input"
@@ -52,7 +48,7 @@
 @code {
     // ── Parameters ─────────────────────────────────────────────────────────────
 
-    /// <summary>Raised when the user successfully types the hash back exactly.</summary>
+    /// <summary>Raised when the typed recovery code verifies against the stored hash.</summary>
     [Parameter] public EventCallback OnFlowCompleted { get; set; }
 
     /// <summary>Raised when the user clicks Cancel.</summary>
@@ -60,29 +56,15 @@
 
     // ── State ──────────────────────────────────────────────────────────────────
 
-    private string _generatedHash = "";
-    private string _typedHash     = "";
-    private string _errorMessage  = "";
+    private string _typedHash    = "";
+    private string _errorMessage = "";
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     /*
-     * OnInitialized()
-     * Generates the one-time hash immediately on component mount.
-     * The result lives only in this field — it is never written to
-     * Preferences, a file, or anywhere else.
-     * GenerateGuardianHash() is synchronous so no async needed here.
-     */
-    protected override void OnInitialized()
-    {
-        _generatedHash = PasswordService.GenerateGuardianHash();
-    }
-
-    /*
      * OnAfterRenderAsync()
-     * Wires the paste-prevention listener on the first render only,
-     * after the DOM element with id="guardian-input" is guaranteed to exist.
-     * Using eval keeps this self-contained — no separate JS file required.
+     * Wires the paste-prevention listener on the first render only, after the
+     * DOM element with id="guardian-input" is guaranteed to exist.
      */
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -96,20 +78,20 @@
 
     /*
      * OnConfirmClickedAsync()
-     * Performs a strict case-sensitive exact match against the generated hash.
-     * On success: raises OnFlowCompleted so the parent can unlock the app.
-     * On failure: sets the error message and leaves typedHash intact so the
-     * user can see what they typed and identify any discrepancy.
+     * Verifies the typed recovery code against the PBKDF2 hash stored during
+     * Guardian setup. On success raises OnFlowCompleted (the parent UnlockModal
+     * then clears the password). On failure shows an error and leaves the typed
+     * value intact so the user can spot the discrepancy.
      */
     private async Task OnConfirmClickedAsync()
     {
-        if (_typedHash == _generatedHash)
+        if (PasswordService.VerifyRecoveryCode(_typedHash))
         {
             await OnFlowCompleted.InvokeAsync();
         }
         else
         {
-            _errorMessage = "Code does not match, please try again.";
+            _errorMessage = "That recovery code is not correct. Please try again.";
         }
     }
 

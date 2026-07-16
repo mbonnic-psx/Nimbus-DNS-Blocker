@@ -26,6 +26,7 @@ namespace Nimbus_Internet_Blocker.Services
         private const string PREF_ENABLED        = "nimbus_password_enabled";
         private const string PREF_ACCOUNTABILITY = "nimbus_accountability_active";
         private const string PREF_RECOVERY       = "nimbus_recovery_mode";
+        private const string PREF_RECOVERY_HASH  = "nimbus_guardian_recovery_hash";
 
         // ── Mode State ─────────────────────────────────────────────────────────
 
@@ -85,11 +86,15 @@ namespace Nimbus_Internet_Blocker.Services
          * and stores the resulting hash string in Preferences.
          * Always records the mode as Guardian and clears the accountability flag.
          *
+         * When recoveryCode is provided (initial Guardian setup), its PBKDF2 hash
+         * is also stored so it can be verified later via VerifyRecoveryCode. When
+         * omitted (password-change path), the existing recovery hash is preserved.
+         *
          * Returns (true, success message) or (false, validation error message).
          * Never throws — all failures come back as a false result.
          */
         public Task<(bool success, string message)> SetPasswordAsync(
-            string password, string confirmPassword)
+            string password, string confirmPassword, string? recoveryCode = null)
         {
             // ── Validation ─────────────────────────────────────────────────────
 
@@ -122,6 +127,15 @@ namespace Nimbus_Internet_Blocker.Services
             Preferences.Set(PREF_ACCOUNTABILITY, false);   // clear accountability flag
             Preferences.Set(PREF_RECOVERY, nameof(RecoveryMode.Guardian));
 
+            // Store the recovery-code hash only during initial Guardian setup.
+            // Change-password calls pass no recoveryCode, preserving the original code
+            // the guardian already holds.
+            if (!string.IsNullOrWhiteSpace(recoveryCode))
+            {
+                var recoveryHash = new PasswordHasher<string>().HashPassword("nimbus", recoveryCode);
+                Preferences.Set(PREF_RECOVERY_HASH, recoveryHash);
+            }
+
             return Task.FromResult((true, "Password set successfully."));
         }
 
@@ -149,6 +163,24 @@ namespace Nimbus_Internet_Blocker.Services
         }
 
         /*
+         * VerifyRecoveryCode()
+         * Re-hashes the typed code with the salt embedded in the stored recovery hash
+         * and compares. Trims surrounding whitespace but preserves case and dashes,
+         * which are significant. Returns false when no recovery hash is stored.
+         */
+        public bool VerifyRecoveryCode(string attempt)
+        {
+            var storedHash = Preferences.Get(PREF_RECOVERY_HASH, string.Empty);
+            if (string.IsNullOrEmpty(storedHash)) return false;
+
+            var result = new PasswordHasher<string>()
+                .VerifyHashedPassword("nimbus", storedHash, attempt.Trim());
+
+            return result == PasswordVerificationResult.Success ||
+                   result == PasswordVerificationResult.SuccessRehashNeeded;
+        }
+
+        /*
          * ClearPasswordAsync()
          * Wipes all protection state from Preferences.
          * Sets PREF_ENABLED and PREF_ACCOUNTABILITY to false (rather than removing)
@@ -161,6 +193,7 @@ namespace Nimbus_Internet_Blocker.Services
             Preferences.Set(PREF_ENABLED, false);
             Preferences.Set(PREF_ACCOUNTABILITY, false);
             Preferences.Remove(PREF_RECOVERY);
+            Preferences.Remove(PREF_RECOVERY_HASH);
             return Task.CompletedTask;
         }
 
@@ -176,7 +209,9 @@ namespace Nimbus_Internet_Blocker.Services
          * The characters are then shuffled so the guaranteed positions are unpredictable.
          *
          * Uses RandomNumberGenerator (CSPRNG) — never System.Random.
-         * This hash is NEVER stored — shown once during setup and discarded.
+         * The plaintext code is shown once during setup and never stored; its
+         * PBKDF2 hash is persisted by SetPasswordAsync so it can be verified
+         * later via VerifyRecoveryCode.
          */
         public string GenerateGuardianHash()
         {

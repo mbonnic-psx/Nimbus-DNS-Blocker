@@ -57,12 +57,16 @@ namespace Nimbus_Internet_Blocker.Services
          * SetPasswordAsync()
          * Guardian mode only — validates, hashes, and stores a new password.
          * Always marks the mode as Guardian and clears the accountability flag.
+         * During initial Guardian setup, pass the one-time recovery code so its
+         * PBKDF2 hash is stored for later verification. Omit it when merely changing
+         * the password — the existing recovery code is preserved.
          * Returns (true, success message) or (false, error message).
          * Never throws — all failures come back as a false result with a message.
          */
         Task<(bool success, string message)> SetPasswordAsync(
             string password,
-            string confirmPassword);
+            string confirmPassword,
+            string? recoveryCode = null);
 
         // ── Password Operations ────────────────────────────────────────────────
 
@@ -73,6 +77,15 @@ namespace Nimbus_Internet_Blocker.Services
          * Never called in Accountability mode — the flow uses question answers instead.
          */
         bool VerifyPassword(string attempt);
+
+        /*
+         * VerifyRecoveryCode()
+         * Checks a typed recovery code against the PBKDF2 hash stored during Guardian
+         * setup. Returns true only on an exact match. Returns false when no recovery
+         * hash is stored (Guardian mode set up before recovery verification existed)
+         * or when the code is wrong.
+         */
+        bool VerifyRecoveryCode(string attempt);
 
         /*
          * ClearPasswordAsync()
@@ -86,10 +99,10 @@ namespace Nimbus_Internet_Blocker.Services
 
         /*
          * GenerateGuardianHash()
-         * Generates a cryptographically random one-time hash in the format:
-         * xxxxxx-xxxxxx-xxxxxx-xxxxxx
-         * NEVER stored anywhere — shown once during Guardian setup and discarded.
-         * The user must hand this to their trusted contact immediately.
+         * Generates a cryptographically random one-time recovery code in the format
+         * xxxxxx-xxxxxx-xxxxxx-xxxxxx. The plaintext code is shown once during Guardian
+         * setup and never stored; its PBKDF2 hash is persisted (see SetPasswordAsync)
+         * so a typed code can be verified later via VerifyRecoveryCode.
          */
         string GenerateGuardianHash();
     }

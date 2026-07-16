@@ -202,11 +202,14 @@ Two mutually exclusive modes, stored in MAUI Preferences (`PasswordService`):
 - **Guardian mode** — password (PBKDF2 hash in Preferences) gates Apply. "Forgot password"
   routes to `GuardianFlow`.
 
-⚠ **Known design flaw:** the guardian recovery code generated at setup is never stored, so
-it can never be verified. `GuardianFlow` currently generates a *fresh* code, displays it
-on screen, and asks the user to retype it — then clears the password. It is friction only,
-not verification. **Fix (top of PLAN.md):** hash the setup-time code with the same PBKDF2
-machinery as the password, store the hash, and verify recovery attempts against it.
+✅ **Guardian recovery is now verifiable.** At Guardian setup, the displayed recovery code's
+PBKDF2 hash is stored in Preferences (`nimbus_guardian_recovery_hash`) via
+`SetPasswordAsync(password, confirmPassword, recoveryCode)`. `GuardianFlow` no longer
+generates or displays a code during recovery — it asks the user to type the code they saved
+at setup and verifies it against the stored hash via `VerifyRecoveryCode`. Changing the
+password (no `recoveryCode` passed) preserves the original recovery hash. Guardian users who
+set up *before* this fix have no stored hash and must remove + re-add Guardian mode to get a
+verifiable code.
 
 ---
 
@@ -230,11 +233,14 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 - [x] Apply button wired end-to-end (with auth gate when a protection mode is active)
 - [x] `CustomSitesService` — add/remove/toggle custom sites, integrated with apply
 - [x] Password protection: Accountability + Guardian modes, UnlockModal, flows
+- [x] Verifiable Guardian recovery — setup-time code hash stored (PBKDF2) and checked
+      against the typed code at recovery, instead of the old "regenerate and compare" theater
 - [x] Snackbar notifications, quote system, neumorphic CSS
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
-1. **Guardian recovery is security theater** — see Password Protection section above.
+1. ~~**Guardian recovery is security theater**~~ — **RESOLVED.** See Password Protection
+   section above.
 2. **Contradictory apply feedback** — `ApplyAsync` swallows all exceptions and returns
    `void`; `Blocking.razor` then shows "Changes applied successfully" even on failure.
    Make `ApplyAsync` return `bool`.
