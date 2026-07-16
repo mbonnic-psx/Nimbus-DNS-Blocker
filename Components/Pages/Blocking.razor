@@ -178,12 +178,12 @@
     private bool _showUnlockModal = false;
 
     /*
-     * _preApplySnapshot stores a deep copy of _presets taken just before the
-     * unlock modal is shown. If the user cancels without authenticating, the
-     * snapshot is restored so toggle positions visually revert to the last
-     * applied state rather than showing unapplied pending changes.
+     * _appliedPresetsSnapshot holds the last preset state that was successfully
+     * applied (seeded from the initial load). If the user flips category toggles
+     * and then cancels the unlock modal, OnModalCancelled restores this snapshot to
+     * both memory and disk so the switches reflect what is actually applied.
      */
-    private PresetsRoot? _preApplySnapshot = null;
+    private PresetsRoot? _appliedPresetsSnapshot = null;
 
     /*
      * _applyStatusMessage and _changesApplied drive the small status line
@@ -199,6 +199,8 @@
     {
         _presets = await PresetService.LoadAsync();
         _categoryCount = _presets?.Categories?.Count ?? 0;
+
+        _appliedPresetsSnapshot = DeepCopy(_presets);
 
         _customRoot = await CustomSitesService.LoadAsync();
     }
@@ -280,10 +282,9 @@
      *
      * No protection configured → applies directly with Applying… state.
      *
-     * Guardian or Accountability mode active → saves a snapshot of the current
-     * presets so OnModalCancelled can restore toggle positions, then opens the
-     * unlock modal. The actual ApplyAsync call happens only after the user
-     * successfully authenticates via OnUnlocked().
+     * Guardian or Accountability mode active → opens the unlock modal. The actual
+     * ApplyAsync call happens only after the user successfully authenticates via
+     * OnUnlocked().
      */
     private async Task OnApplyClicked()
     {
@@ -302,6 +303,7 @@
                 await HostsFileService.ApplyAsync();
                 _applyStatusMessage = "Changes applied successfully";
                 _changesApplied     = true;
+                _appliedPresetsSnapshot = DeepCopy(_presets);
             }
             catch
             {
@@ -313,8 +315,6 @@
             return;
         }
 
-        // Take snapshot before showing the modal so we can restore on cancel
-        _preApplySnapshot = DeepCopy(_presets);
         _showUnlockModal  = true;
         StateHasChanged();
     }
@@ -322,13 +322,13 @@
     /*
      * OnUnlocked()
      * Called by UnlockModal when the user passes authentication.
-     * Clears the snapshot (auth succeeded — no restore needed), closes the modal,
-     * then performs the actual apply wrapped in try/catch for status feedback.
+     * Closes the modal, then performs the actual apply wrapped in try/catch for
+     * status feedback. On success, refreshes the last-applied snapshot so a later
+     * cancel reverts to this new state rather than the original one.
      */
     private async Task OnUnlocked()
     {
         _showUnlockModal  = false;
-        _preApplySnapshot = null;
         _isApplying       = true;
         StateHasChanged();
 
@@ -337,6 +337,7 @@
             await HostsFileService.ApplyAsync();
             _applyStatusMessage = "Changes applied successfully";
             _changesApplied     = true;
+            _appliedPresetsSnapshot = DeepCopy(_presets);
         }
         catch
         {
@@ -349,19 +350,19 @@
 
     /*
      * OnModalCancelled()
-     * Called by UnlockModal when the user dismisses without authenticating.
-     * If a snapshot was saved, restores _presets from it so all toggles visually
-     * revert to the state at the last successful apply. This prevents the UI from
-     * showing unapplied pending changes after the user backs out.
+     * The user backed out of the unlock modal without authenticating. Restore the
+     * category toggles to the last-applied state — in memory and on disk — so the
+     * switches never show unapplied pending changes.
      */
-    private void OnModalCancelled()
+    private async Task OnModalCancelled()
     {
         _showUnlockModal = false;
 
-        if (_preApplySnapshot is not null)
+        if (_appliedPresetsSnapshot is not null)
         {
-            _presets          = _preApplySnapshot;
-            _preApplySnapshot = null;
+            _presets       = DeepCopy(_appliedPresetsSnapshot);
+            _categoryCount = _presets?.Categories?.Count ?? 0;
+            await PresetService.SaveAsync(_presets);
             StateHasChanged();
         }
     }

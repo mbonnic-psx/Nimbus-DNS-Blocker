@@ -244,8 +244,11 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 2. **Contradictory apply feedback** — `ApplyAsync` swallows all exceptions and returns
    `void`; `Blocking.razor` then shows "Changes applied successfully" even on failure.
    Make `ApplyAsync` return `bool`.
-3. **Dead snapshot logic** — `Blocking.razor`'s `_preApplySnapshot` is taken *after*
-   toggles are already saved, so cancel-restore is a no-op. Delete or redesign.
+3. ~~**Dead snapshot logic**~~ — **RESOLVED for category toggles.** `Blocking.razor` now
+   keeps `_appliedPresetsSnapshot`, seeded on load and refreshed only after a successful
+   apply; `OnModalCancelled` restores it to both memory and disk. Custom-site toggle
+   revert-on-cancel is still a follow-up — `ToggleCustomEnabledAsync` persists immediately
+   through `CustomSitesService` and isn't covered by this snapshot.
 4. **Data-loss path** — `LoadAsync` returns an empty root on any exception; the next save
    overwrites the user's config with it. Saves are also not atomic.
 5. **~120 lines duplicated** between `PresetService` and `CustomSitesService`

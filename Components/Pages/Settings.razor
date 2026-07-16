@@ -80,6 +80,16 @@
                            @bind:event="oninput" />
                 </div>
 
+                <div class="pw-hint">
+                    Password must be at least 8 characters and include a letter, a number,
+                    and a special character.
+                </div>
+
+                @if (!string.IsNullOrEmpty(_setupError))
+                {
+                    <div class="pw-error">@_setupError</div>
+                }
+
                 <button class="btn btn-primary pw-action-btn"
                         type="button"
                         @onclick="SetPasswordAsync">
@@ -141,6 +151,11 @@
                        @bind:event="oninput" />
             </div>
 
+            @if (!string.IsNullOrEmpty(_changeError))
+            {
+                <div class="pw-error">@_changeError</div>
+            }
+
             <button class="btn btn-primary pw-action-btn"
                     type="button"
                     @onclick="ChangePasswordAsync">
@@ -182,6 +197,9 @@
     private RecoveryMode? _selectedMode  = null;
     private string _guardianHash         = "";
 
+    private string _setupError  = "";   // inline error for the Guardian setup form
+    private string _changeError = "";   // inline error for the Change Password form
+
     private bool _showUnlockModal      = false;
     private bool _passwordEnabled      = false;
     private bool _accountabilityActive = false;
@@ -205,6 +223,7 @@
     {
         _selectedMode = RecoveryMode.Accountability;
         _guardianHash = "";
+        _setupError   = "";
     }
 
     /*
@@ -221,6 +240,7 @@
     {
         _selectedMode = RecoveryMode.Guardian;
         _guardianHash = PasswordService.GenerateGuardianHash();
+        _setupError   = "";
     }
 
     // ── Mode Activation ────────────────────────────────────────────────────────
@@ -252,18 +272,16 @@
      */
     private async Task SetPasswordAsync()
     {
+        _setupError = "";
         try
         {
             var (success, message) = await PasswordService.SetPasswordAsync(
                 _newPassword, _confirmPassword, _guardianHash);
 
             if (success)
-                Snackbar.Success("Password set", message);
-            else
-                Snackbar.Error("Failed to set password", message);
-
-            if (success)
             {
+                Snackbar.Success("Password set", message);
+
                 _newPassword          = "";
                 _confirmPassword      = "";
                 _guardianHash         = "";
@@ -272,9 +290,15 @@
                 _accountabilityActive = PasswordService.IsAccountabilityModeActive();
                 StateHasChanged();
             }
+            else
+            {
+                _setupError = message;                       // inline red text
+                Snackbar.Error("Failed to set password", message);
+            }
         }
         catch (Exception ex)
         {
+            _setupError = ex.Message;
             Snackbar.Error("Unexpected error", ex.Message);
         }
     }
@@ -290,9 +314,12 @@
      */
     private async Task ChangePasswordAsync()
     {
+        _changeError = "";
+
         bool currentCorrect = PasswordService.VerifyPassword(_currentPassword);
         if (!currentCorrect)
         {
+            _changeError = "Current password is incorrect.";
             Snackbar.Error("Incorrect password", "Current password is incorrect.");
             return;
         }
@@ -301,15 +328,16 @@
             _newPassword, _confirmPassword);
 
         if (success)
-            Snackbar.Success("Password changed", message);
-        else
-            Snackbar.Error("Failed to change password", message);
-
-        if (success)
         {
+            Snackbar.Success("Password changed", message);
             _currentPassword = "";
             _newPassword     = "";
             _confirmPassword = "";
+        }
+        else
+        {
+            _changeError = message;
+            Snackbar.Error("Failed to change password", message);
         }
     }
 
