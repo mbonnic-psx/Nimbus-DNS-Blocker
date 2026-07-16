@@ -1,10 +1,24 @@
 # Nimbus DNS Blocker — Claude Code Context
 
+> Roadmap and business plan live in **PLAN.md**. This file describes what the code *is*;
+> PLAN.md describes where it's *going*. Keep both updated when features land.
+
 ## What This App Does
 
-Nimbus DNS Blocker is a **Windows desktop application** built with .NET MAUI + Blazor WebView that helps users block distracting websites at the system level by modifying the Windows hosts file. It targets people dealing with digital compulsivity, focus issues, or parental control needs.
+Nimbus DNS Blocker is a **Windows desktop application** built with .NET MAUI + Blazor WebView
+that blocks distracting websites at the system level by writing a managed section into the
+Windows hosts file. It targets people dealing with digital compulsivity, focus issues, or
+parental-control needs.
 
-Blocking works by redirecting domains to `0.0.0.0` in the hosts file and flushing the DNS cache via `ipconfig /flushdns`. The app is **local-first** — no backend, no accounts, no telemetry.
+Blocking works by redirecting domains to `0.0.0.0` / `::` in the hosts file and flushing the
+DNS cache via `ipconfig /flushdns`. The app is **local-first** — no backend, no accounts,
+no telemetry. That privacy stance is a product decision, not an accident; don't add
+network calls or telemetry without an explicit request.
+
+**Known honest limitation:** the app requires Administrator to apply rules, so the user can
+always bypass it (edit hosts directly, clear AppData/Preferences). Blocking is *friction*,
+not enforcement. Browser DNS-over-HTTPS currently bypasses hosts-file blocking entirely —
+fixing that via browser policy registry keys is a top roadmap item (see PLAN.md).
 
 ---
 
@@ -12,43 +26,61 @@ Blocking works by redirecting domains to `0.0.0.0` in the hosts file and flushin
 
 |Layer|Technology|
 |---|---|
-|Framework|.NET MAUI (targets Windows only)|
-|Language|C# 11|
+|Framework|.NET MAUI (net9.0; Windows is the only real target — see Tech Debt)|
+|Language|C# (nullable enabled, implicit usings)|
 |UI|Blazor WebView (Razor components in `.razor` files)|
 |Styling|Custom CSS — neumorphic design in `wwwroot/css/app.css`|
-|Storage|JSON via `System.Text.Json` stored in `%LOCALAPPDATA%`|
+|Storage|JSON via `System.Text.Json` in `%LOCALAPPDATA%`; flags/hash in MAUI `Preferences`|
 |DI|`Microsoft.Extensions.DependencyInjection` via `MauiProgram.cs`|
+|Password hashing|PBKDF2 via `PasswordHasher<T>` (ASP.NET Identity packages — slated for removal, see Tech Debt)|
 
 ---
 
-## Project Structure
+## Project Structure (actual, verified)
 
 ```
-Nimbus-Internet-Blocker/
+Nimbus-DNS-Blocker/
 ├── Components/
-│   └── Pages/
-│       ├── Home.razor           # Dashboard — quote of the day + usage stats
-│       ├── Blocking.razor       # Category toggles + custom site input
-│       └── Settings.razor       # Password setup + hosts file restore
+│   ├── Layout/
+│   │   ├── MainLayout.razor         # App shell with sidebar nav
+│   │   └── NavMenu.razor
+│   ├── Pages/
+│   │   ├── Home.razor               # Dashboard — quote of the day
+│   │   ├── Blocking.razor           # Category toggles, custom sites, Apply button
+│   │   └── Settings.razor           # Protection mode setup (Accountability/Guardian)
+│   ├── Shared/
+│   │   ├── UnlockModal.razor        # Auth gate — routes to password/accountability/guardian views
+│   │   ├── AccountabilityFlow.razor # 5-question grounding flow with timed delays
+│   │   └── GuardianFlow.razor       # Recovery-code flow (KNOWN FLAWED — see Tech Debt)
+│   ├── Routes.razor
+│   └── _Imports.razor
 ├── Models/
-│   ├── PresetsRoot.cs           # Root model for category blocklists
-│   └── CustomsRoot.cs           # Root model for user-added custom sites
+│   ├── PresetsRoot.cs               # Categories → entries (host/ipv4/ipv6)
+│   ├── CustomsRoot.cs               # User-added custom sites
+│   └── JsonLoad.cs                  # EMPTY placeholder — delete or use
 ├── Services/
-│   ├── PresetService.cs         # Category blocklist load/save/normalize
-│   ├── CustomSitesService.cs    # Custom sites CRUD (WIP)
-│   ├── HostsFileService.cs      # Hosts file read/write/backup (TO BE BUILT)
-│   ├── QuoteService.cs          # Loads daily inspirational quote
-│   └── SnackbarService.cs       # Toast/snackbar notification system
+│   ├── HostsFileService.cs          # Hosts read/write/backup/splice + DNS flush (DONE)
+│   ├── IHostsFileService.cs
+│   ├── PresetService.cs             # Category blocklist load/save/normalize (no interface yet)
+│   ├── CustomSitesService.cs        # Custom sites CRUD (no interface yet)
+│   ├── PasswordService.cs           # Modes, PBKDF2 hash, guardian code generation
+│   ├── IPasswordService.cs
+│   ├── QuoteService.cs              # Random quote per app launch (not truly daily)
+│   └── SnackbarService.cs           # Toast notifications (ISnackbarService)
 ├── Shared/
-│   └── MainLayout.razor         # App shell with sidebar nav
-├── Resources/
-│   └── Raw/
-│       ├── presets.seed.json    # Default category config (ships with app)
-│       └── custom.seed.json     # Default custom sites config
+│   └── SnackbarHost.razor           # Renders snackbar messages
+├── Utilities/
+│   └── HostValidation.cs            # EMPTY placeholder — intended home for shared NormalizeHost
+├── Resources/Raw/
+│   ├── presets.seed.json            # Default categories (ships with app)
+│   └── custom.seed.json             # Default custom sites
 ├── wwwroot/
-│   └── css/app.css              # All styles — do not inline styles in Razor
-├── MauiProgram.cs               # App entry point + DI registrations
-└── App.xaml.cs                  # MAUI application root
+│   ├── css/app.css                  # All styles — do not inline styles in Razor
+│   ├── css/js/rain.js               # Background effect (yes, JS lives under css/ — move someday)
+│   └── index.html
+├── Platforms/                       # Android/iOS/MacCatalyst/Tizen scaffolding — unused, Windows only
+├── MauiProgram.cs                   # Entry point + DI registrations
+└── App.xaml.cs
 ```
 
 ---
@@ -56,57 +88,73 @@ Nimbus-Internet-Blocker/
 ## Architecture Rules — Always Follow These
 
 ### Service Layer Pattern
-
-- All business logic lives in `Services/`. Razor components call services — they do not contain logic directly.
+- All business logic lives in `Services/`. Razor components call services — they do not
+  contain logic directly.
 - Services are registered as **Singletons** in `MauiProgram.cs`.
-- Always inject via constructor or `@inject` in Razor — never `new` a service directly.
+- Always inject via constructor or `@inject` — never `new` a service directly.
+- Create an interface for any service that touches the file system or OS (testability).
+  `PresetService` and `CustomSitesService` currently violate this — fix when touched.
 
 ### Async/Await
-
-- All file I/O and any potentially slow operation must be `async Task` — no `.Result` or `.Wait()` blocking calls.
-- UI-bound state changes in Razor components call `StateHasChanged()` after async updates if needed.
+- All file I/O and any potentially slow operation must be `async Task` — no `.Result`
+  or `.Wait()` blocking calls.
+- UI-bound state changes call `StateHasChanged()` after async updates if needed.
 
 ### Data Persistence — Seed File Pattern
-
-- App ships with `*.seed.json` files in `Resources/Raw/`.
-- On first run, `PresetService` copies the seed file to `%LOCALAPPDATA%\...\Data\presets.json`.
-- All reads/writes at runtime go to the AppData live file, never the seed.
-- Same pattern applies to `CustomSitesService`.
+- App ships with `*.seed.json` in `Resources/Raw/`. On first run the service copies the
+  seed to `%LOCALAPPDATA%\...\Data\<name>.json`. All runtime reads/writes go to the live
+  file, never the seed.
+- **Saves should be atomic** (write temp file, then `File.Replace`) — not yet implemented,
+  do it this way when touching save paths.
+- Never let a failed load silently produce an empty root that a later save persists —
+  that is a data-loss path (see Tech Debt).
 
 ### URL / Domain Normalization
-
-- Always strip protocol (`https://`), ports (`:443`), and paths (`/foo`) from user input.
-- Lowercase all domains.
-- Deduplicate case-insensitively within a category.
+- Strip protocol (`https://`), ports (`:443`), and paths (`/foo`) from user input.
+- Lowercase all domains, trim trailing dots, deduplicate case-insensitively.
 - Normalize before saving, not after loading.
 
-### Snackbar for User Feedback
-
+### User Feedback
 - All user-facing success/error feedback goes through `ISnackbarService`.
-- Never use `Console.WriteLine`, `Debug.WriteLine`, or alerts for user feedback.
+- Never `Console.WriteLine`/`Debug.WriteLine` as the *only* record of a user-affecting
+  failure — surface it.
+- Operations that can fail must report success/failure to the caller (return `bool` or a
+  result type), not swallow exceptions and return `void`.
 
 ---
 
 ## Key Data Models
 
 ```csharp
-// Root config object loaded from presets.json
-public class PresetsRoot
+public sealed class PresetsRoot
 {
-    public Dictionary<string, PresetCategory> Categories { get; set; }
+    public Dictionary<string, PresetCategory> Categories { get; set; } = new();
 }
 
-public class PresetCategory
+public sealed class PresetCategory
 {
     public bool Enabled { get; set; }
-    public List<PresetEntry> Entries { get; set; }
+    public List<PresetEntry> Entries { get; set; } = new();
 }
 
-public class PresetEntry
+public sealed class PresetEntry
 {
-    public string Host { get; set; }   // e.g. "facebook.com"
-    public string Ipv4 { get; set; }   // default "0.0.0.0"
-    public string Ipv6 { get; set; }   // default "::"
+    public string Host { get; set; } = "";   // e.g. "facebook.com"
+    public string Ipv4 { get; set; } = "0.0.0.0";
+    public string Ipv6 { get; set; } = "::";
+}
+
+public sealed class CustomsRoot
+{
+    public List<CustomEntry> Sites { get; set; } = new();
+}
+
+public sealed class CustomEntry   // Enabled is bool? — null means "default to enabled"
+{
+    public bool?  Enabled { get; set; }
+    public string Host    { get; set; } = "";
+    public string Ipv4    { get; set; } = "0.0.0.0";
+    public string Ipv6    { get; set; } = "::";
 }
 ```
 
@@ -116,91 +164,128 @@ public class PresetEntry
 
 ```
 Hosts file:       C:\Windows\System32\drivers\etc\hosts
-Hosts backup:     C:\Windows\System32\drivers\etc\hosts.nimbus.bak
-AppData base:     %LOCALAPPDATA%\<username>\com.companyname.nimbusinternetblocker\Data\
+Hosts backup:     C:\Windows\System32\drivers\etc\hosts.nimbus.bak   (one-time, pre-Nimbus state)
+AppData base:     %LOCALAPPDATA%\...\com.companyname.nimbusinternetblocker\Data\
 Presets config:   ...Data\presets.json
 Custom config:    ...Data\custom.json
+Password state:   MAUI Preferences (keys prefixed nimbus_)
 ```
-
----
 
 ## Hosts File Format
 
-Nimbus owns a clearly delimited section. Never touch lines outside this section.
+Nimbus owns a clearly delimited section. **Never touch lines outside this section.**
 
 ```
 # --- Nimbus-managed section BEGIN ---
-0.0.0.0      facebook.com
-::           facebook.com
-0.0.0.0      www.facebook.com
-::           www.facebook.com
-0.0.0.0      x.com
-::           x.com
+0.0.0.0         facebook.com
+::              facebook.com
+0.0.0.0         www.facebook.com
+::              www.facebook.com
 # --- Nimbus-managed section END ---
 ```
 
-- Both `host.com` and `www.host.com` are written for each entry.
-- Write both IPv4 (`0.0.0.0`) and the entry's `Host` field.
-- After every write, run `ipconfig /flushdns` in a hidden background process.
+- Both apex and `www.` variants are written for each entry (skip `www.` if host already has it).
+- Write UTF-8 without BOM. After every write, run `ipconfig /flushdns` hidden (non-fatal on failure).
+- The splice logic (`HostsFileService.SpliceSection`) normalizes CRLF/LF and replaces only
+  the delimited block; if markers are missing it appends a new block.
 
 ---
 
-## DI Registration (MauiProgram.cs)
+## Password Protection — How It Actually Works
 
-All services registered as Singletons. When adding a new service, register it here:
+Two mutually exclusive modes, stored in MAUI Preferences (`PasswordService`):
+
+- **Accountability mode** — no password. Applying rules opens `UnlockModal`, which routes
+  to `AccountabilityFlow`: 5 questions with a 3-second delay each; answering "urge" (Q3)
+  or "no" (Q4) intentionally cancels the flow; Q5 requires typing the daily quote (paste
+  blocked via JS interop).
+- **Guardian mode** — password (PBKDF2 hash in Preferences) gates Apply. "Forgot password"
+  routes to `GuardianFlow`.
+
+⚠ **Known design flaw:** the guardian recovery code generated at setup is never stored, so
+it can never be verified. `GuardianFlow` currently generates a *fresh* code, displays it
+on screen, and asks the user to retype it — then clears the password. It is friction only,
+not verification. **Fix (top of PLAN.md):** hash the setup-time code with the same PBKDF2
+machinery as the password, store the hash, and verify recovery attempts against it.
+
+---
+
+## DI Registration (MauiProgram.cs) — current
 
 ```csharp
 builder.Services.AddSingleton<ISnackbarService, SnackbarService>();
 builder.Services.AddSingleton<QuoteService>();
 builder.Services.AddSingleton<PresetService>();
 builder.Services.AddSingleton<CustomSitesService>();
-// Add new services below:
-builder.Services.AddSingleton<IHostsFileService, HostsFileService>();
+builder.Services.AddSingleton<IHostsFileService, HostsFileService>();  // Windows-only, CA1416 suppressed
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
 ```
-
-Always create an interface for services that touch the file system or OS (testability + mockability).
 
 ---
 
 ## What's Done
 
-- [x] Category-based blocking UI (9 categories)
-- [x] JSON config persistence with seed file pattern
-- [x] Neumorphic UI design + CSS
-- [x] Inspirational quote system (`QuoteService`)
-- [x] Snackbar notification system
-- [x] `PresetService` with load/save/normalize
-- [x] DI wiring in `MauiProgram.cs`
+- [x] Category-based blocking UI + JSON persistence with seed pattern
+- [x] `HostsFileService` — backup, delimited-section splice, DNS flush, elevation check
+- [x] Apply button wired end-to-end (with auth gate when a protection mode is active)
+- [x] `CustomSitesService` — add/remove/toggle custom sites, integrated with apply
+- [x] Password protection: Accountability + Guardian modes, UnlockModal, flows
+- [x] Snackbar notifications, quote system, neumorphic CSS
 
-## What's NOT Done Yet (Build in this order)
+## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
-- [ ] `HostsFileService` — reads/writes/backups the hosts file (MOST CRITICAL)
-- [ ] Apply button wired end-to-end (calls `HostsFileService` + DNS flush)
-- [ ] `CustomSitesService` — full CRUD + integration with apply flow
-- [ ] Settings page — restore from backup
-- [ ] Password protection (Phase 2)
-- [ ] Usage statistics on dashboard (Phase 2)
-- [ ] Timer-based blocking (Phase 2)
-- [ ] Resources page (Phase 2)
+1. **Guardian recovery is security theater** — see Password Protection section above.
+2. **Contradictory apply feedback** — `ApplyAsync` swallows all exceptions and returns
+   `void`; `Blocking.razor` then shows "Changes applied successfully" even on failure.
+   Make `ApplyAsync` return `bool`.
+3. **Dead snapshot logic** — `Blocking.razor`'s `_preApplySnapshot` is taken *after*
+   toggles are already saved, so cancel-restore is a no-op. Delete or redesign.
+4. **Data-loss path** — `LoadAsync` returns an empty root on any exception; the next save
+   overwrites the user's config with it. Saves are also not atomic.
+5. **~120 lines duplicated** between `PresetService` and `CustomSitesService`
+   (`NormalizeHost`, seed plumbing) with copy-paste artifacts: wrong fallback seed shape
+   in `CustomSitesService` (`{"categories":{}}` should be `{"sites":[]}`), log messages
+   naming the wrong service. Extract shared helpers into `Utilities/HostValidation.cs`.
+6. **Wrong packages** — `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
+   `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy, unused) exist only for
+   `PasswordHasher<T>`. Replace with `Rfc2898DeriveBytes.Pbkdf2` and delete both.
+7. **Phantom platforms** — csproj targets android/ios/maccatalyst; `HostsFileService`
+   would throw on them. Trim to the Windows TFM.
+8. **No restore/unblock-all feature** — backup is written but nothing reads it; Settings
+   still says "Coming soon".
+9. **DoH bypass** — Chrome/Edge/Firefox secure DNS skips the hosts file. Fix via browser
+   policy registry keys (see PLAN.md, Track 1).
+10. **No tests** — `SpliceSection` and `NormalizeHost` are pure functions; test them first.
+11. Misc: `presets.seed.json` has a stray `"exclude"` block at the top; empty
+    `JsonLoad.cs`/`HostValidation.cs`; `rain.js` lives under `css/`; quote is per-launch
+    random, not per-day; stale personal-path comments in services.
+
+## What's NOT Done (see PLAN.md for order and rationale)
+
+- [ ] Track 1 v1.0: bug fixes above + restore/unblock-all + DoH policy fix + rename + release
+- [ ] Track 2 (paid, gated on validation): Windows service, timed/locked sessions,
+      browser extension, verified Guardian mode, stats
 
 ---
 
 ## Coding Style
 
-- Use `var` for local variables where the type is obvious.
-- Prefer expression-bodied members for simple getters/one-liners.
-- XML doc comments (`/// <summary>`) on all public service methods.
-- No magic strings — use `const` for repeated literals (especially section markers and file paths).
-- Wrap all file I/O in try/catch and surface errors via `ISnackbarService`.
-
----
+- `var` where the type is obvious; expression-bodied members for one-liners.
+- XML doc comments on public service methods.
+- No magic strings — `const` for section markers, file names, Preferences keys.
+- Wrap file I/O in try/catch and surface errors via `ISnackbarService`.
+- Comments state *invariants and why*, not C# tutorials or narration of the next line.
+  Delete tutorial-style comments when editing a file; never let a comment describe
+  behavior the code doesn't have.
 
 ## What NOT To Do
 
 - Do not put business logic in Razor components — move it to a service.
-- Do not write to the hosts file without creating a backup first.
-- Do not block the UI thread — everything async.
-- Do not add NuGet packages without checking if the functionality exists in `System.*` first.
+- Do not write to the hosts file without the one-time backup existing first.
 - Do not modify lines outside the Nimbus-managed section in the hosts file.
-- Do not store passwords in plaintext — Phase 2 uses libsodium/Argon2id hashing.
-- Do not inline CSS styles in Razor — all styles belong in `wwwroot/css/app.css`.
+- Do not block the UI thread — everything async.
+- Do not add NuGet packages without checking `System.*` first (see Tech Debt #6 for how
+  this went wrong once already).
+- Do not store passwords or recovery codes in plaintext — PBKDF2 hash only.
+- Do not inline CSS in Razor — all styles belong in `wwwroot/css/app.css`.
+- Do not add telemetry, accounts, or network calls — local-first is the product.
