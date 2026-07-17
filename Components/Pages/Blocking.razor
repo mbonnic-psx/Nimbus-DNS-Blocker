@@ -40,7 +40,7 @@
                             <label class="switch" title="Enable/disable category">
                                 <input type="checkbox"
                                        checked="@cat.Enabled"
-                                       @onchange="async _ => await OnCategoryChangedAsync(name)" />
+                                       @onchange="_ => OnCategoryChanged(name)" />
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -178,14 +178,6 @@
     private bool _showUnlockModal = false;
 
     /*
-     * _appliedPresetsSnapshot holds the last preset state that was successfully
-     * applied (seeded from the initial load). If the user flips category toggles
-     * and then cancels the unlock modal, OnModalCancelled restores this snapshot to
-     * both memory and disk so the switches reflect what is actually applied.
-     */
-    private PresetsRoot? _appliedPresetsSnapshot = null;
-
-    /*
      * _applyStatusMessage and _changesApplied drive the small status line
      * shown below the Apply button. Both are cleared whenever the user modifies
      * any category or custom site so stale success/failure text never lingers.
@@ -200,14 +192,18 @@
         _presets = await PresetService.LoadAsync();
         _categoryCount = _presets?.Categories?.Count ?? 0;
 
-        _appliedPresetsSnapshot = DeepCopy(_presets);
-
         _customRoot = await CustomSitesService.LoadAsync();
     }
 
     // ── Category Management ────────────────────────────────────────────────────
 
-    private async Task OnCategoryChangedAsync(string name)
+    /*
+     * OnCategoryChanged()
+     * Flips a category toggle in memory only. Pending flips are persisted by
+     * ApplyPendingAsync at apply time; disk always holds the last-applied state,
+     * so cancelling (or navigating away) discards pending flips by design.
+     */
+    private void OnCategoryChanged(string name)
     {
         ClearApplyStatus();
 
@@ -215,7 +211,6 @@
         if (!_presets.Categories.TryGetValue(name, out var cat)) return;
 
         cat.Enabled = !cat.Enabled;
-        await PresetService.SaveAsync(_presets);
     }
 
     // ── Custom Sites ───────────────────────────────────────────────────────────
@@ -278,13 +273,8 @@
 
     /*
      * OnApplyClicked()
-     * Single entry point for the Apply Blocking Rules button.
-     *
-     * No protection configured → applies directly with Applying… state.
-     *
-     * Guardian or Accountability mode active → opens the unlock modal. The actual
-     * ApplyAsync call happens only after the user successfully authenticates via
-     * OnUnlocked().
+     * No protection configured → applies directly. Otherwise opens the unlock
+     * modal; the actual apply happens in OnUnlocked after authentication.
      */
     private async Task OnApplyClicked()
     {
@@ -293,78 +283,71 @@
         bool needsAuth = PasswordService.IsPasswordEnabled()
                       || PasswordService.IsAccountabilityModeActive();
 
-        if (!needsAuth)
+        if (needsAuth)
         {
-            _isApplying = true;
+            _showUnlockModal = true;
             StateHasChanged();
-
-            try
-            {
-                await HostsFileService.ApplyAsync();
-                _applyStatusMessage = "Changes applied successfully";
-                _changesApplied     = true;
-                _appliedPresetsSnapshot = DeepCopy(_presets);
-            }
-            catch
-            {
-                _applyStatusMessage = "Failed to apply changes, please try again";
-                _changesApplied     = false;
-            }
-
-            _isApplying = false;
             return;
         }
 
-        _showUnlockModal  = true;
-        StateHasChanged();
+        await ApplyPendingAsync();
     }
 
     /*
      * OnUnlocked()
      * Called by UnlockModal when the user passes authentication.
-     * Closes the modal, then performs the actual apply wrapped in try/catch for
-     * status feedback. On success, refreshes the last-applied snapshot so a later
-     * cancel reverts to this new state rather than the original one.
      */
     private async Task OnUnlocked()
     {
-        _showUnlockModal  = false;
-        _isApplying       = true;
+        _showUnlockModal = false;
+        await ApplyPendingAsync();
+    }
+
+    /*
+     * ApplyPendingAsync()
+     * Persists the pending category toggles, then writes the hosts file.
+     * Invariant: the presets file is only ever written here, so outside an apply
+     * it always describes the last-applied state — which is what OnModalCancelled
+     * reloads on cancel. If the hosts write fails, the previous config is written
+     * back so the invariant survives failure (pending flips stay visible in the
+     * UI for a retry).
+     */
+    private async Task ApplyPendingAsync()
+    {
+        _isApplying = true;
         StateHasChanged();
 
-        try
-        {
-            await HostsFileService.ApplyAsync();
-            _applyStatusMessage = "Changes applied successfully";
-            _changesApplied     = true;
-            _appliedPresetsSnapshot = DeepCopy(_presets);
-        }
-        catch
-        {
-            _applyStatusMessage = "Failed to apply changes, please try again";
-            _changesApplied     = false;
-        }
+        var lastApplied = await PresetService.LoadAsync();
+
+        if (_presets is not null)
+            await PresetService.SaveAsync(_presets);
+
+        bool applied = await HostsFileService.ApplyAsync();
+
+        if (!applied)
+            await PresetService.SaveAsync(lastApplied);
+
+        _applyStatusMessage = applied
+            ? "Changes applied successfully"
+            : "Failed to apply changes, please try again";
+        _changesApplied = applied;
 
         _isApplying = false;
     }
 
     /*
      * OnModalCancelled()
-     * The user backed out of the unlock modal without authenticating. Restore the
-     * category toggles to the last-applied state — in memory and on disk — so the
-     * switches never show unapplied pending changes.
+     * The user backed out of the unlock modal without authenticating. Pending
+     * flips were never saved, so reloading from disk restores the last-applied
+     * state exactly.
      */
     private async Task OnModalCancelled()
     {
         _showUnlockModal = false;
 
-        if (_appliedPresetsSnapshot is not null)
-        {
-            _presets       = DeepCopy(_appliedPresetsSnapshot);
-            _categoryCount = _presets?.Categories?.Count ?? 0;
-            await PresetService.SaveAsync(_presets);
-            StateHasChanged();
-        }
+        _presets       = await PresetService.LoadAsync();
+        _categoryCount = _presets?.Categories?.Count ?? 0;
+        StateHasChanged();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -379,35 +362,5 @@
     {
         _applyStatusMessage = "";
         _changesApplied     = false;
-    }
-
-    /*
-     * DeepCopy()
-     * Produces an independent copy of a PresetsRoot so mutations to _presets
-     * after the snapshot is taken do not corrupt the snapshot.
-     * Uses explicit LINQ projection rather than JSON round-trip to avoid
-     * needing a System.Text.Json namespace in the component.
-     */
-    private static PresetsRoot? DeepCopy(PresetsRoot? source)
-    {
-        if (source is null) return null;
-
-        return new PresetsRoot
-        {
-            Categories = source.Categories.ToDictionary(
-                kvp => kvp.Key,
-                kvp => new PresetCategory
-                {
-                    Enabled = kvp.Value.Enabled,
-                    Entries = kvp.Value.Entries
-                        .Select(e => new PresetEntry
-                        {
-                            Host = e.Host,
-                            Ipv4 = e.Ipv4,
-                            Ipv6 = e.Ipv6
-                        })
-                        .ToList()
-                })
-        };
     }
 }

@@ -236,19 +236,29 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 - [x] Verifiable Guardian recovery — setup-time code hash stored (PBKDF2) and checked
       against the typed code at recovery, instead of the old "regenerate and compare" theater
 - [x] Snackbar notifications, quote system, neumorphic CSS
+- [x] Truthful apply feedback — `ApplyAsync` returns `bool`, never throws
+- [x] Pending-until-apply category toggles — flips are in-memory only until Apply
+      succeeds; disk always reflects the last-applied state, so Cancel and page
+      navigation both discard unapplied flips honestly
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
 1. ~~**Guardian recovery is security theater**~~ — **RESOLVED.** See Password Protection
    section above.
-2. **Contradictory apply feedback** — `ApplyAsync` swallows all exceptions and returns
-   `void`; `Blocking.razor` then shows "Changes applied successfully" even on failure.
-   Make `ApplyAsync` return `bool`.
-3. ~~**Dead snapshot logic**~~ — **RESOLVED for category toggles.** `Blocking.razor` now
-   keeps `_appliedPresetsSnapshot`, seeded on load and refreshed only after a successful
-   apply; `OnModalCancelled` restores it to both memory and disk. Custom-site toggle
-   revert-on-cancel is still a follow-up — `ToggleCustomEnabledAsync` persists immediately
-   through `CustomSitesService` and isn't covered by this snapshot.
+2. ~~**Contradictory apply feedback**~~ — **RESOLVED.** `IHostsFileService.ApplyAsync`
+   returns `Task<bool>` (never throws); `Blocking.razor` branches on the result to set the
+   status line instead of assuming success.
+3. ~~**Dead snapshot logic**~~ — **RESOLVED for category toggles, redesigned.** The
+   slice-002 snapshot approach (`_appliedPresetsSnapshot`/`DeepCopy`) had a hole: category
+   flips saved to disk immediately, so disk could hold pending (unapplied) state that got
+   baked into the snapshot as if applied. Fixed by changing the invariant instead: category
+   flips (`OnCategoryChanged`) are now pending, in-memory only — nothing is saved on flip.
+   `Blocking.razor`'s `ApplyPendingAsync` is the *only* place that writes the presets file,
+   immediately before the hosts write, so disk always equals the last-applied state. Cancel
+   (`OnModalCancelled`) and navigation both just reload from disk, discarding any pending
+   flips by design. All snapshot machinery was deleted. Custom-site toggle revert-on-cancel
+   remains a scoped-out follow-up — `ToggleCustomEnabledAsync` still persists immediately
+   through `CustomSitesService` and is intentionally not covered by this design.
 4. **Data-loss path** — `LoadAsync` returns an empty root on any exception; the next save
    overwrites the user's config with it. Saves are also not atomic.
 5. **~120 lines duplicated** between `PresetService` and `CustomSitesService`

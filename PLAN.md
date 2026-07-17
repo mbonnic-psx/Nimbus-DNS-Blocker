@@ -26,7 +26,7 @@ Fix the verified bugs before anything new. All are listed with detail in CLAUDE.
       machinery as the password) and store the hash in Preferences; `GuardianFlow`
       verifies the *typed* code against that stored hash instead of generating a fresh
       one on screen. (~1 day; the single worst flaw in the app)
-- [ ] **Truthful apply feedback** — `IHostsFileService.ApplyAsync` returns `bool`;
+- [x] **Truthful apply feedback** — `IHostsFileService.ApplyAsync` returns `bool`;
       `Blocking.razor` branches on it; delete the dead `_preApplySnapshot` logic. (~½ day)
 - [ ] **Safe persistence** — atomic saves (temp file + `File.Replace`) in both config
       services; failed `LoadAsync` must not return an empty root that a later save

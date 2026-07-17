@@ -16,6 +16,9 @@ public interface IHostsFileService
     /// writes their domains into the Nimbus-managed block inside the system hosts file,
     /// and flushes the DNS cache.  A one-time backup of the original hosts file is
     /// created before the very first write.
+    /// Returns <see langword="true"/> when the hosts file was written successfully,
+    /// <see langword="false"/> when nothing was applied (not elevated, or the write failed).
+    /// Never throws — failures are reported via the snackbar and the return value.
     /// </summary>
-    Task ApplyAsync();
+    Task<bool> ApplyAsync();
 }

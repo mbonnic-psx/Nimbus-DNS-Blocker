@@ -42,7 +42,7 @@ public sealed class HostsFileService : IHostsFileService
         new WindowsPrincipal(WindowsIdentity.GetCurrent())
             .IsInRole(WindowsBuiltInRole.Administrator);
 
-    public async Task ApplyAsync()
+    public async Task<bool> ApplyAsync()
     {
         if (!IsElevated)
         {
@@ -51,7 +51,7 @@ public sealed class HostsFileService : IHostsFileService
                 "Administrator required",
                 "Nimbus must be run as Administrator to edit the hosts file. " +
                 "Right-click the app and choose 'Run as administrator'.");
-            return;
+            return false;
         }
 
         try
@@ -84,6 +84,7 @@ public sealed class HostsFileService : IHostsFileService
             FlushDns();
 
             _snackbar.Success("Rules applied", "All enabled categories and custom sites are now active.");
+            return true;
         }
         catch (UnauthorizedAccessException)
         {
@@ -91,11 +92,13 @@ public sealed class HostsFileService : IHostsFileService
                 "Access denied",
                 "Nimbus needs Administrator privileges to edit the hosts file. " +
                 "Please restart the app as Administrator.");
+            return false;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"HostsFileService.ApplyAsync failed: {ex}");
             _snackbar.Error("Apply failed", ex.Message);
+            return false;
         }
     }
 
