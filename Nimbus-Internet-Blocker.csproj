@@ -72,4 +72,10 @@
       <Folder Include="wwwroot\data\" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Test project is built separately; keep it out of the app's compile glob -->
+        <Compile Remove="Nimbus.Tests\**\*.cs" />
+        <None Remove="Nimbus.Tests\**" />
+    </ItemGroup>
+
 </Project>

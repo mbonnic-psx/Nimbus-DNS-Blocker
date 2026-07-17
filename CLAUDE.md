@@ -71,7 +71,8 @@ Nimbus-DNS-Blocker/
 │   └── SnackbarHost.razor           # Renders snackbar messages
 ├── Utilities/
 │   ├── AtomicFile.cs                # Crash-safe temp-file + File.Replace writes (DONE)
-│   └── HostValidation.cs            # EMPTY placeholder — intended home for shared NormalizeHost
+│   ├── HostValidation.cs            # Shared NormalizeHost — used by both config services (DONE)
+│   └── HostsSection.cs              # Pure hosts-block splice logic, extracted for testability (DONE)
 ├── Resources/Raw/
 │   ├── presets.seed.json            # Default categories (ships with app)
 │   └── custom.seed.json             # Default custom sites
@@ -80,6 +81,8 @@ Nimbus-DNS-Blocker/
 │   ├── css/js/rain.js               # Background effect (yes, JS lives under css/ — move someday)
 │   └── index.html
 ├── Platforms/                       # Android/iOS/MacCatalyst/Tizen scaffolding — unused, Windows only
+├── Nimbus.Tests/                    # Plain net9.0 xUnit project — compiles Utilities/*.cs directly,
+│                                     # no MAUI dependency, runs on Windows or Linux (DONE)
 ├── MauiProgram.cs                   # Entry point + DI registrations
 └── App.xaml.cs
 ```
@@ -243,6 +246,9 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       state, so Cancel and page navigation both discard unapplied changes honestly
 - [x] Safe persistence — nullable `LoadAsync` (never masks a corrupt file as empty),
       atomic `SaveAsync` via `Utilities/AtomicFile.cs`, save failures surfaced
+- [x] Unit tests for `HostsSection.Splice` and `HostValidation.NormalizeHost` — both
+      extracted from their MAUI-bound services into `Utilities/` so a plain net9.0 xUnit
+      project (`Nimbus.Tests/`) can compile and test them without the MAUI workload
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -270,11 +276,15 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    snackbar rather than saving over the damaged file. `SaveAsync` on both services returns
    `bool` and writes atomically via `Utilities/AtomicFile.cs` (temp file + `File.Replace`),
    so a failed write never truncates the live file, and callers surface save failures.
-5. **~120 lines duplicated** between `PresetService` and `CustomSitesService`
-   (`NormalizeHost`, seed plumbing) — the dedup itself is still open (Phase 2), but the
-   copy-paste artifacts are fixed: `CustomSitesService`'s fallback seed shape is now
+5. **~120 lines duplicated** between `PresetService` and `CustomSitesService` — the
+   `NormalizeHost` half is now resolved: both services call the shared
+   `Utilities/HostValidation.NormalizeHost` instead of keeping private copies (pulled
+   forward from Phase 2 by slice 005, since it needed to be testable outside MAUI). The
+   copy-paste artifacts are also fixed: `CustomSitesService`'s fallback seed shape is now
    `{"sites":[]}` (was wrongly `{"categories":{}}`), and its `LoadAsync`/`SaveAsync` debug
-   log messages now name `CustomSitesService` instead of `PresetService`.
+   log messages now name `CustomSitesService` instead of `PresetService`. Remaining dedup
+   (seed plumbing — `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) is still open for
+   Phase 2.
 6. **Wrong packages** — `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
    `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy, unused) exist only for
    `PasswordHasher<T>`. Replace with `Rfc2898DeriveBytes.Pbkdf2` and delete both.
@@ -284,7 +294,14 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    still says "Coming soon".
 9. **DoH bypass** — Chrome/Edge/Firefox secure DNS skips the hosts file. Fix via browser
    policy registry keys (see PLAN.md, Track 1).
-10. **No tests** — `SpliceSection` and `NormalizeHost` are pure functions; test them first.
+10. ~~**No tests**~~ — **RESOLVED for the two pure functions.** `SpliceSection` (now
+    `Utilities/HostsSection.Splice`) and `NormalizeHost` (now
+    `Utilities/HostValidation.NormalizeHost`) were extracted out of `HostsFileService`/
+    `PresetService`/`CustomSitesService` — both were `private` and MAUI-bound, so a plain
+    test project couldn't reach them otherwise. Covered by `Nimbus.Tests/` (plain `net9.0`
+    xUnit project, compiles the two utility files directly, no MAUI/service dependency —
+    runs on Windows or Linux). No behavior changed by the extraction. Other code paths
+    (services, Razor components) remain untested — out of scope for Phase 0.
 11. Misc: `presets.seed.json` has a stray `"exclude"` block at the top; empty
     `JsonLoad.cs`/`HostValidation.cs`; `rain.js` lives under `css/`; quote is per-launch
     random, not per-day; stale personal-path comments in services.

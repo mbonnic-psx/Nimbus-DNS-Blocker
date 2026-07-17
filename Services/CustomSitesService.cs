@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Nimbus_Internet_Blocker.Models;
 using Nimbus_Internet_Blocker.Utilities;
@@ -121,7 +120,7 @@ namespace Nimbus_Internet_Blocker.Services
 
             foreach (var site in root.Sites)
             {
-                site.Host = NormalizeHost(site.Host); // Clean the host text
+                site.Host = HostValidation.NormalizeHost(site.Host); // Clean the host text
 
                 site.Enabled ??= true; // Default to enabled
 
@@ -150,7 +149,7 @@ namespace Nimbus_Internet_Blocker.Services
         /// </summary>
         public (bool success, string message) AddSite(CustomsRoot root, string inputHost)
         {
-            var normalizedHost = NormalizeHost(inputHost);
+            var normalizedHost = HostValidation.NormalizeHost(inputHost);
 
             if (string.IsNullOrWhiteSpace(normalizedHost) || !normalizedHost.Contains('.'))
                 return (false, "Enter a valid host like example.com.");
@@ -170,7 +169,7 @@ namespace Nimbus_Internet_Blocker.Services
         /// </summary>
         public (bool success, string message) RemoveSite(CustomsRoot root, string host)
         {
-            var normalizedHost = NormalizeHost(host);
+            var normalizedHost = HostValidation.NormalizeHost(host);
 
             if (string.IsNullOrWhiteSpace(normalizedHost))
                 return (false, "Invalid host provided.");
@@ -199,23 +198,5 @@ namespace Nimbus_Internet_Blocker.Services
             return await reader.ReadToEndAsync();
         }
 
-        private static string NormalizeHost(string? input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return "";
-
-            var s = input.Trim();
-
-            s = Regex.Replace(s, @"^\s*https?://", "", RegexOptions.IgnoreCase); // strip scheme if pasted as a URL
-
-            var slash = s.IndexOf('/');
-            if (slash >= 0) s = s[..slash]; //cut off path/query/fragment
-
-            var colon = s.IndexOf(':');
-            if (colon >= 0) s = s[..colon]; // remove port if present (example.com:443)
-
-            s = s.Trim().TrimEnd('.').ToLowerInvariant();
-
-            return s;
-        }
     }
 }

@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Nimbus_Internet_Blocker.Services
@@ -128,7 +127,7 @@ namespace Nimbus_Internet_Blocker.Services
                 // 2) normalize each entry
                 foreach (var entry in category.Entries)
                 {
-                    entry.Host = NormalizeHost(entry.Host); // Clean the host text
+                    entry.Host = HostValidation.NormalizeHost(entry.Host); // Clean the host text
 
                     if (entry.Ipv4 == null)
                     {
@@ -167,23 +166,5 @@ namespace Nimbus_Internet_Blocker.Services
             return await reader.ReadToEndAsync();
         }
 
-        private static string NormalizeHost(string? input)
-        {
-            if (string.IsNullOrWhiteSpace(input)) return "";
-
-            var s = input.Trim();
-
-            s = Regex.Replace(s, @"^\s*https?://", "", RegexOptions.IgnoreCase); // strip scheme if pasted as a URL
-
-            var slash = s.IndexOf('/');
-            if (slash >= 0) s = s[..slash]; //cut off path/query/fragment
-
-            var colon = s.IndexOf(':');
-            if (colon >= 0) s = s[..colon]; // remove port if present (example.com:443)
-
-            s = s.Trim().TrimEnd('.').ToLowerInvariant();
-
-            return s;
-        }
     }
 }

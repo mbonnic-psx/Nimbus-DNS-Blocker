@@ -33,7 +33,7 @@ Fix the verified bugs before anything new. All are listed with detail in CLAUDE.
       persists; save failures surface via snackbar. (~1 day)
 - [ ] **Restore / Unblock All** — Settings button that empties the Nimbus section (or
       restores `hosts.nimbus.bak`) and flushes DNS. Replaces "Coming soon". (~1 day)
-- [ ] **Unit tests** for `SpliceSection` (missing/reversed/duplicate markers, CRLF/LF)
+- [x] **Unit tests** for `SpliceSection` (missing/reversed/duplicate markers, CRLF/LF)
       and `NormalizeHost`. Nothing else needs tests for v1. (~1 day)
 
 ### Phase 1 — Close the DoH bypass (~2–3 days)
@@ -64,6 +64,9 @@ the release: "blocks sites even with Secure DNS enabled."
 - [ ] Deduplicate `PresetService`/`CustomSitesService` shared logic into
       `Utilities/HostValidation.cs`; fix the wrong fallback seed shape and wrong-service
       log messages; add interfaces for both services.
+      *(`NormalizeHost` half already done — slice 005 pulled it forward so it could be
+      unit tested; the seed-shape/log-message fixes also landed then. Remaining here:
+      seed plumbing dedup + service interfaces.)*
 - [ ] Junk removal: stray `"exclude"` block in `presets.seed.json`, empty `JsonLoad.cs`,
       move `rain.js` out of `css/`, delete tutorial comments and stale personal paths.
 - [ ] Quote of the day = seeded by date (so it's actually daily); fix typos/inconsistent

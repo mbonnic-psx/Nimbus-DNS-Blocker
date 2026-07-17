@@ -1,4 +1,5 @@
 using Nimbus_Internet_Blocker.Models;
+using Nimbus_Internet_Blocker.Utilities;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Principal;
@@ -15,10 +16,6 @@ public sealed class HostsFileService : IHostsFileService
     // ── File paths ─────────────────────────────────────────────────────────────
     private const string HostsFilePath = @"C:\Windows\System32\drivers\etc\hosts";
     private const string BackupPath    = @"C:\Windows\System32\drivers\etc\hosts.nimbus.bak";
-
-    // ── Section delimiters ─────────────────────────────────────────────────────
-    private const string SectionBegin = "# --- Nimbus-managed section BEGIN ---";
-    private const string SectionEnd   = "# --- Nimbus-managed section END ---";
 
     // ── Dependencies ───────────────────────────────────────────────────────────
     private readonly PresetService      _presetService;
@@ -82,7 +79,7 @@ public sealed class HostsFileService : IHostsFileService
             var section = BuildSection(presets, customs);
 
             // 5. Splice the block into the hosts file content
-            var updatedContent = SpliceSection(hostsContent, section);
+            var updatedContent = HostsSection.Splice(hostsContent, section);
 
             // 6. Write back (UTF-8, no BOM — standard for hosts files)
             var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -132,7 +129,7 @@ public sealed class HostsFileService : IHostsFileService
     private static string BuildSection(PresetsRoot presets, CustomsRoot customs)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(SectionBegin);
+        sb.AppendLine(HostsSection.BeginMarker);
 
         // Preset categories ────────────────────────────────────────────────────
         if (presets.Categories is not null)
@@ -159,7 +156,7 @@ public sealed class HostsFileService : IHostsFileService
             }
         }
 
-        sb.Append(SectionEnd);  // No trailing newline — SpliceSection controls final endings
+        sb.Append(HostsSection.EndMarker);  // No trailing newline — HostsSection.Splice controls final endings
         return sb.ToString();
     }
 
@@ -180,54 +177,6 @@ public sealed class HostsFileService : IHostsFileService
             sb.AppendLine($"{ipv4,-16}{www}");
             sb.AppendLine($"{ipv6,-16}{www}");
         }
-    }
-
-    /// <summary>
-    /// Finds the existing Nimbus-managed section in <paramref name="hostsContent"/> and
-    /// replaces it with <paramref name="newSection"/>.  When no existing section is found
-    /// (first run), the new section is appended after the current file content.
-    /// Lines outside the delimited block are never modified.
-    /// </summary>
-    private static string SpliceSection(string hostsContent, string newSection)
-    {
-        // Normalise to \n for index-based line processing
-        var lines = hostsContent
-            .Replace("\r\n", "\n")
-            .Replace("\r",   "\n")
-            .Split('\n');
-
-        int beginIdx = -1;
-        int endIdx   = -1;
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var trimmed = lines[i].Trim();
-            if (beginIdx == -1 && trimmed == SectionBegin) { beginIdx = i; continue; }
-            if (endIdx   == -1 && trimmed == SectionEnd)   { endIdx   = i; }
-        }
-
-        // Normalise the incoming section to individual lines as well
-        var sectionLines = newSection
-            .Replace("\r\n", "\n")
-            .Replace("\r",   "\n")
-            .Split('\n');
-
-        if (beginIdx >= 0 && endIdx >= 0 && endIdx >= beginIdx)
-        {
-            // Both markers found — splice in the new block
-            var parts = new List<string>(lines.Length);
-            parts.AddRange(lines[..beginIdx]);      // everything before BEGIN
-            parts.AddRange(sectionLines);            // new Nimbus block (includes markers)
-            parts.AddRange(lines[(endIdx + 1)..]);  // everything after END
-            return string.Join(Environment.NewLine, parts);
-        }
-
-        // No existing section — append after current content with a blank separator
-        var sb = new StringBuilder(hostsContent.TrimEnd());
-        sb.AppendLine();
-        sb.AppendLine();
-        sb.AppendLine(newSection);
-        return sb.ToString();
     }
 
     /// <summary>
