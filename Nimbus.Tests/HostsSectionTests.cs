@@ -199,4 +199,103 @@ public class HostsSectionTests
 
         Assert.Equal(Lines(once), Lines(twice));
     }
+
+    private static string[] TrimTrailingEmpty(string[] lines)
+    {
+        int end = lines.Length;
+        while (end > 0 && lines[end - 1].Length == 0) end--;
+        return lines[..end];
+    }
+
+    [Fact]
+    public void Remove_BlockPresent_DeletesMarkersAndEverythingBetween()
+    {
+        var before = new[] { "127.0.0.1 localhost", "# comment" };
+        var block = new[] { HostsSection.BeginMarker, "0.0.0.0 facebook.com", HostsSection.EndMarker };
+        var after = new[] { "8.8.8.8 dns" };
+        var hostsContent = string.Join("\n", before.Concat(block).Concat(after));
+
+        var lines = Lines(HostsSection.Remove(hostsContent));
+
+        var expected = before.Concat(after).ToArray();
+        Assert.Equal(expected, lines);
+        Assert.DoesNotContain(lines, l => l.Contains("facebook.com"));
+    }
+
+    [Fact]
+    public void Remove_NoMarkers_ReturnsContentUnchanged()
+    {
+        var hostsContent = string.Join("\n", new[] { "127.0.0.1 localhost", "8.8.8.8 dns" });
+
+        var result = HostsSection.Remove(hostsContent);
+
+        Assert.Equal(hostsContent, result);
+    }
+
+    [Fact]
+    public void Remove_ReversedMarkers_ReturnsContentUnchanged()
+    {
+        var hostsContent = string.Join("\n", new[]
+        {
+            "127.0.0.1 localhost",
+            HostsSection.EndMarker,
+            "8.8.8.8 dns",
+            HostsSection.BeginMarker,
+            "1.1.1.1 cloudflare"
+        });
+
+        var result = HostsSection.Remove(hostsContent);
+
+        Assert.Equal(hostsContent, result);
+    }
+
+    [Fact]
+    public void Remove_CrlfInput_MatchesLfInputAfterLineNormalization()
+    {
+        var contentLines = new[]
+        {
+            "127.0.0.1 localhost",
+            HostsSection.BeginMarker,
+            "0.0.0.0 old.com",
+            HostsSection.EndMarker,
+            "8.8.8.8 dns"
+        };
+        var lf   = string.Join("\n", contentLines);
+        var crlf = string.Join("\r\n", contentLines);
+
+        var lfResult   = Lines(HostsSection.Remove(lf));
+        var crlfResult = Lines(HostsSection.Remove(crlf));
+
+        Assert.Equal(lfResult, crlfResult);
+    }
+
+    [Fact]
+    public void Remove_BlockAtEndOfFileWithoutTrailingNewline_IsRemovedCleanly()
+    {
+        var hostsContent = string.Join("\n", new[]
+        {
+            "127.0.0.1 localhost",
+            HostsSection.BeginMarker,
+            "0.0.0.0 old.com",
+            HostsSection.EndMarker
+        }); // no trailing newline — the Nimbus block is the very last thing in the file
+
+        var lines = Lines(HostsSection.Remove(hostsContent));
+
+        Assert.Equal(new[] { "127.0.0.1 localhost" }, lines);
+    }
+
+    [Fact]
+    public void Remove_AfterSplice_RoundTripsBackToOriginalContent()
+    {
+        var originalLines = new[] { "127.0.0.1 localhost", "8.8.8.8 dns" };
+        var original = string.Join("\n", originalLines);
+        var section = string.Join("\n", new[] { HostsSection.BeginMarker, "0.0.0.0 facebook.com", HostsSection.EndMarker });
+
+        var applied  = HostsSection.Splice(original, section);
+        var restored = HostsSection.Remove(applied);
+
+        var restoredLines = TrimTrailingEmpty(Lines(restored));
+        Assert.Equal(originalLines, restoredLines);
+    }
 }

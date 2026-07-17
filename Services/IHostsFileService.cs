@@ -21,4 +21,13 @@ public interface IHostsFileService
     /// Never throws — failures are reported via the snackbar and the return value.
     /// </summary>
     Task<bool> ApplyAsync();
+
+    /// <summary>
+    /// Removes the entire Nimbus-managed section from the hosts file and flushes
+    /// the DNS cache, unblocking every site Nimbus was blocking. The one-time
+    /// backup is created first if it doesn't exist yet. Returns
+    /// <see langword="false"/> when nothing was restored (not elevated, or the
+    /// write failed). Never throws.
+    /// </summary>
+    Task<bool> RestoreAsync();
 }

@@ -107,6 +107,57 @@ public sealed class HostsFileService : IHostsFileService
         }
     }
 
+    public async Task<bool> RestoreAsync()
+    {
+        if (!IsElevated)
+        {
+            _snackbar.Error(
+                "Administrator required",
+                "Nimbus must be run as Administrator to edit the hosts file. " +
+                "Right-click the app and choose 'Run as administrator'.");
+            return false;
+        }
+
+        try
+        {
+            var hostsContent = await File.ReadAllTextAsync(HostsFilePath);
+
+            await EnsureBackupAsync(hostsContent);
+
+            var updated = HostsSection.Remove(hostsContent);
+
+            if (updated == hostsContent)
+            {
+                // No Nimbus section present — nothing to remove, still a successful unblock.
+                FlushDns();
+                _snackbar.Success("Blocking removed", "All Nimbus blocking rules have been removed.");
+                return true;
+            }
+
+            var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            await File.WriteAllTextAsync(HostsFilePath, updated, utf8NoBom);
+
+            FlushDns();
+
+            _snackbar.Success("Blocking removed", "All Nimbus blocking rules have been removed.");
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _snackbar.Error(
+                "Access denied",
+                "Nimbus needs Administrator privileges to edit the hosts file. " +
+                "Please restart the app as Administrator.");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"HostsFileService.RestoreAsync failed: {ex}");
+            _snackbar.Error("Restore failed", ex.Message);
+            return false;
+        }
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────────
 
     /// <summary>

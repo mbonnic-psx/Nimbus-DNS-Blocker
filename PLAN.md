@@ -19,6 +19,8 @@ Rules of the road:
 
 ### Phase 0 — Make the core trustworthy (~1–2 weeks)
 
+**Phase 0 complete.** (2026-07-17)
+
 Fix the verified bugs before anything new. All are listed with detail in CLAUDE.md
 "Known Bugs / Tech Debt".
 
@@ -31,7 +33,7 @@ Fix the verified bugs before anything new. All are listed with detail in CLAUDE.
 - [x] **Safe persistence** — atomic saves (temp file + `File.Replace`) in both config
       services; failed `LoadAsync` must not return an empty root that a later save
       persists; save failures surface via snackbar. (~1 day)
-- [ ] **Restore / Unblock All** — Settings button that empties the Nimbus section (or
+- [x] **Restore / Unblock All** — Settings button that empties the Nimbus section (or
       restores `hosts.nimbus.bak`) and flushes DNS. Replaces "Coming soon". (~1 day)
 - [x] **Unit tests** for `SpliceSection` (missing/reversed/duplicate markers, CRLF/LF)
       and `NormalizeHost`. Nothing else needs tests for v1. (~1 day)

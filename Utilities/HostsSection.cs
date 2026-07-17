@@ -58,4 +58,38 @@ public static class HostsSection
         sb.AppendLine(newSection);
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Removes the entire Nimbus-managed section — markers included — from
+    /// <paramref name="hostsContent"/>. When no complete section is found (missing
+    /// or reversed markers), the content is returned unchanged: never destructive
+    /// outside the delimited block.
+    /// </summary>
+    public static string Remove(string hostsContent)
+    {
+        var lines = hostsContent
+            .Replace("\r\n", "\n")
+            .Replace("\r",   "\n")
+            .Split('\n');
+
+        int beginIdx = -1;
+        int endIdx   = -1;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].Trim();
+            if (beginIdx == -1 && trimmed == BeginMarker) { beginIdx = i; continue; }
+            if (endIdx   == -1 && trimmed == EndMarker)   { endIdx   = i; }
+        }
+
+        if (beginIdx >= 0 && endIdx >= beginIdx)
+        {
+            var parts = new List<string>(lines.Length);
+            parts.AddRange(lines[..beginIdx]);      // everything before BEGIN
+            parts.AddRange(lines[(endIdx + 1)..]);  // everything after END
+            return string.Join(Environment.NewLine, parts);
+        }
+
+        return hostsContent;
+    }
 }

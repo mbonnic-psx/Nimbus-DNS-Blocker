@@ -47,7 +47,7 @@ Nimbus-DNS-Blocker/
 │   ├── Pages/
 │   │   ├── Home.razor               # Dashboard — quote of the day
 │   │   ├── Blocking.razor           # Category toggles, custom sites, Apply button
-│   │   └── Settings.razor           # Protection mode setup (Accountability/Guardian)
+│   │   └── Settings.razor           # Protection mode setup + Restore/Unblock All
 │   ├── Shared/
 │   │   ├── UnlockModal.razor        # Auth gate — routes to password/accountability/guardian views
 │   │   ├── AccountabilityFlow.razor # 5-question grounding flow with timed delays
@@ -249,6 +249,10 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 - [x] Unit tests for `HostsSection.Splice` and `HostValidation.NormalizeHost` — both
       extracted from their MAUI-bound services into `Utilities/` so a plain net9.0 xUnit
       project (`Nimbus.Tests/`) can compile and test them without the MAUI workload
+- [x] Restore / Unblock All — Settings button removes the Nimbus hosts section
+      (`HostsSection.Remove`, unit tested), disables every category and custom site in
+      sync so disk keeps describing the applied state, gated behind the unlock modal when
+      a protection mode is active, flushes DNS
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -290,8 +294,15 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    `PasswordHasher<T>`. Replace with `Rfc2898DeriveBytes.Pbkdf2` and delete both.
 7. **Phantom platforms** — csproj targets android/ios/maccatalyst; `HostsFileService`
    would throw on them. Trim to the Windows TFM.
-8. **No restore/unblock-all feature** — backup is written but nothing reads it; Settings
-   still says "Coming soon".
+8. ~~**No restore/unblock-all feature**~~ — **RESOLVED.** Settings has a "Restore / Unblock
+   All" button (`IHostsFileService.RestoreAsync`, backed by the pure `HostsSection.Remove`).
+   It removes the entire Nimbus-managed section from the hosts file — the pre-existing
+   `hosts.nimbus.bak` is left untouched as a manual escape hatch, never copied back, since
+   that could clobber hosts edits the user made since Nimbus first ran. Both config files
+   are then rewritten with every category and custom site set to `Enabled = false`,
+   preserving list membership so the disk-equals-applied-state invariant (slices 003/004)
+   holds after the unblock. Gated behind the unlock modal when a protection mode is active,
+   same as Apply; does not remove the protection mode itself.
 9. **DoH bypass** — Chrome/Edge/Firefox secure DNS skips the hosts file. Fix via browser
    policy registry keys (see PLAN.md, Track 1).
 10. ~~**No tests**~~ — **RESOLVED for the two pure functions.** `SpliceSection` (now

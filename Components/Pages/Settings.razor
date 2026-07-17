@@ -1,13 +1,34 @@
 @page "/settings"
 @inject IPasswordService PasswordService
 @inject ISnackbarService Snackbar
+@inject IHostsFileService HostsFileService
+@inject PresetService PresetService
+@inject CustomSitesService CustomSitesService
 
 <div class="settings-page">
 
-    <!-- Existing content — preserved unchanged -->
     <div class="card card-pad">
         <h1 class="h1">Settings</h1>
-        <p class="subhead">Coming soon.</p>
+
+        <h2 class="pw-heading">Restore / Unblock All</h2>
+        <p class="subhead">
+            Removes every Nimbus blocking rule from your system and switches all
+            categories and custom sites off. Your custom site list is kept.
+        </p>
+
+        @if (!HostsFileService.IsElevated)
+        {
+            <div class="admin-warning">
+                ⚠ Nimbus is not running as Administrator — blocking rules cannot be changed.
+            </div>
+        }
+
+        <button class="btn btn-danger pw-action-btn"
+                type="button"
+                disabled="@(_isRestoring || !HostsFileService.IsElevated)"
+                @onclick="OnRestoreClicked">
+            @(_isRestoring ? "Restoring…" : "Restore / Unblock All")
+        </button>
     </div>
 
     <!-- ── Password Protection ─────────────────────────────────────────────── -->
@@ -178,7 +199,7 @@
     </div>
 
     <UnlockModal IsVisible="_showUnlockModal"
-                 OnUnlocked="OnRemovePasswordUnlocked"
+                 OnUnlocked="OnUnlockedAsync"
                  OnCancelled="OnModalCancelled" />
 
 </div>
@@ -203,6 +224,10 @@
     private bool _showUnlockModal      = false;
     private bool _passwordEnabled      = false;
     private bool _accountabilityActive = false;
+
+    private enum UnlockPurpose { RemoveProtection, Restore }
+    private UnlockPurpose _unlockPurpose = UnlockPurpose.RemoveProtection;
+    private bool _isRestoring = false;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -355,6 +380,7 @@
      */
     private void OnRemovePasswordClicked()
     {
+        _unlockPurpose   = UnlockPurpose.RemoveProtection;
         _showUnlockModal = true;
         StateHasChanged();
     }
@@ -380,6 +406,93 @@
 
         _passwordEnabled      = PasswordService.IsPasswordEnabled();
         _accountabilityActive = PasswordService.IsAccountabilityModeActive();
+        StateHasChanged();
+    }
+
+    /*
+     * OnUnlockedAsync()
+     * The single OnUnlocked handler for the shared UnlockModal instance — routes
+     * to the restore flow or the existing remove-protection flow depending on
+     * which action opened the modal.
+     */
+    private async Task OnUnlockedAsync()
+    {
+        if (_unlockPurpose == UnlockPurpose.Restore)
+        {
+            _showUnlockModal = false;
+            await RunRestoreAsync();
+            return;
+        }
+
+        await OnRemovePasswordUnlocked();
+    }
+
+    // ── Restore / Unblock All ──────────────────────────────────────────────────
+
+    /*
+     * OnRestoreClicked()
+     * Unblocking everything is the impulsive action the protection modes exist to
+     * slow down, so an active mode gates restore behind the same unlock flow as
+     * Apply. No protection → restore runs directly.
+     */
+    private async Task OnRestoreClicked()
+    {
+        if (_isRestoring) return;
+
+        bool needsAuth = PasswordService.IsPasswordEnabled()
+                      || PasswordService.IsAccountabilityModeActive();
+
+        if (needsAuth)
+        {
+            _unlockPurpose   = UnlockPurpose.Restore;
+            _showUnlockModal = true;
+            StateHasChanged();
+            return;
+        }
+
+        await RunRestoreAsync();
+    }
+
+    /*
+     * RunRestoreAsync()
+     * Order matters: unblock the hosts file first (the user's actual intent), then
+     * rewrite both configs with everything disabled so disk keeps describing the
+     * applied state (slice 003/004 invariant). A config-save failure after a
+     * successful hosts restore is surfaced but doesn't undo the unblock.
+     */
+    private async Task RunRestoreAsync()
+    {
+        _isRestoring = true;
+        StateHasChanged();
+
+        bool restored = await HostsFileService.RestoreAsync();
+
+        if (restored)
+        {
+            var presets = await PresetService.LoadAsync();
+            var customs = await CustomSitesService.LoadAsync();
+
+            bool configsSynced = presets is not null && customs is not null;
+
+            if (configsSynced)
+            {
+                foreach (var category in presets!.Categories.Values)
+                    category.Enabled = false;
+
+                foreach (var site in customs!.Sites)
+                    site.Enabled = false;
+
+                configsSynced = await PresetService.SaveAsync(presets)
+                              & await CustomSitesService.SaveAsync(customs);
+            }
+
+            if (!configsSynced)
+                Snackbar.Warn("Toggles out of sync",
+                    "Blocking was removed, but the saved toggle states couldn't be updated. " +
+                    "They will correct on your next Apply.");
+        }
+
+        _isRestoring = false;
         StateHasChanged();
     }
 
