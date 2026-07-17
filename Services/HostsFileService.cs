@@ -64,6 +64,14 @@ public sealed class HostsFileService : IHostsFileService
             var presets = presetsTask.Result;
             var customs = customsTask.Result;
 
+            if (presets is null || customs is null)
+            {
+                _snackbar.Error(
+                    "Apply aborted",
+                    "Your saved blocking configuration couldn't be read. Nothing was changed.");
+                return false;
+            }
+
             // 2. Read the current hosts file
             var hostsContent = await File.ReadAllTextAsync(HostsFilePath);
 

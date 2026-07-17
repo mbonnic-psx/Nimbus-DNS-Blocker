@@ -70,6 +70,7 @@ Nimbus-DNS-Blocker/
 ├── Shared/
 │   └── SnackbarHost.razor           # Renders snackbar messages
 ├── Utilities/
+│   ├── AtomicFile.cs                # Crash-safe temp-file + File.Replace writes (DONE)
 │   └── HostValidation.cs            # EMPTY placeholder — intended home for shared NormalizeHost
 ├── Resources/Raw/
 │   ├── presets.seed.json            # Default categories (ships with app)
@@ -237,9 +238,11 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       against the typed code at recovery, instead of the old "regenerate and compare" theater
 - [x] Snackbar notifications, quote system, neumorphic CSS
 - [x] Truthful apply feedback — `ApplyAsync` returns `bool`, never throws
-- [x] Pending-until-apply category toggles — flips are in-memory only until Apply
-      succeeds; disk always reflects the last-applied state, so Cancel and page
-      navigation both discard unapplied flips honestly
+- [x] Pending-until-apply category and custom-site changes — toggles, adds, and removes
+      are in-memory only until Apply succeeds; disk always reflects the last-applied
+      state, so Cancel and page navigation both discard unapplied changes honestly
+- [x] Safe persistence — nullable `LoadAsync` (never masks a corrupt file as empty),
+      atomic `SaveAsync` via `Utilities/AtomicFile.cs`, save failures surfaced
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -248,23 +251,30 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 2. ~~**Contradictory apply feedback**~~ — **RESOLVED.** `IHostsFileService.ApplyAsync`
    returns `Task<bool>` (never throws); `Blocking.razor` branches on the result to set the
    status line instead of assuming success.
-3. ~~**Dead snapshot logic**~~ — **RESOLVED for category toggles, redesigned.** The
-   slice-002 snapshot approach (`_appliedPresetsSnapshot`/`DeepCopy`) had a hole: category
-   flips saved to disk immediately, so disk could hold pending (unapplied) state that got
-   baked into the snapshot as if applied. Fixed by changing the invariant instead: category
-   flips (`OnCategoryChanged`) are now pending, in-memory only — nothing is saved on flip.
-   `Blocking.razor`'s `ApplyPendingAsync` is the *only* place that writes the presets file,
-   immediately before the hosts write, so disk always equals the last-applied state. Cancel
-   (`OnModalCancelled`) and navigation both just reload from disk, discarding any pending
-   flips by design. All snapshot machinery was deleted. Custom-site toggle revert-on-cancel
-   remains a scoped-out follow-up — `ToggleCustomEnabledAsync` still persists immediately
-   through `CustomSitesService` and is intentionally not covered by this design.
-4. **Data-loss path** — `LoadAsync` returns an empty root on any exception; the next save
-   overwrites the user's config with it. Saves are also not atomic.
+3. ~~**Dead snapshot logic**~~ — **RESOLVED, full parity.** The slice-002 snapshot approach
+   (`_appliedPresetsSnapshot`/`DeepCopy`) had a hole: category flips saved to disk
+   immediately, so disk could hold pending (unapplied) state that got baked into the
+   snapshot as if applied. Fixed by changing the invariant instead: category flips
+   (`OnCategoryChanged`) are pending, in-memory only — nothing is saved on flip. Custom-site
+   toggle, add, and remove (`ToggleCustomEnabled`, `AddCustom`, `RemoveCustom`,
+   `CustomSitesService.AddSite`/`RemoveSite`) got the same treatment — the whole
+   `CustomsRoot` is one file, so partial persistence there would silently break the
+   invariant, making all-or-nothing pending state the only coherent design.
+   `Blocking.razor`'s `ApplyPendingAsync` is the *only* place that writes either config
+   file, immediately before the hosts write, so disk always equals the last-applied state.
+   Cancel (`OnModalCancelled`) and navigation both just reload from disk, discarding any
+   pending flips/adds/removes by design. All snapshot machinery was deleted.
+4. ~~**Data-loss path**~~ — **RESOLVED.** `PresetService.LoadAsync`/`CustomSitesService.LoadAsync`
+   return `null` on read/parse failure instead of an empty root — callers (`Blocking.razor`,
+   `HostsFileService.ApplyAsync`) treat `null` as "do not touch disk" and abort with a
+   snackbar rather than saving over the damaged file. `SaveAsync` on both services returns
+   `bool` and writes atomically via `Utilities/AtomicFile.cs` (temp file + `File.Replace`),
+   so a failed write never truncates the live file, and callers surface save failures.
 5. **~120 lines duplicated** between `PresetService` and `CustomSitesService`
-   (`NormalizeHost`, seed plumbing) with copy-paste artifacts: wrong fallback seed shape
-   in `CustomSitesService` (`{"categories":{}}` should be `{"sites":[]}`), log messages
-   naming the wrong service. Extract shared helpers into `Utilities/HostValidation.cs`.
+   (`NormalizeHost`, seed plumbing) — the dedup itself is still open (Phase 2), but the
+   copy-paste artifacts are fixed: `CustomSitesService`'s fallback seed shape is now
+   `{"sites":[]}` (was wrongly `{"categories":{}}`), and its `LoadAsync`/`SaveAsync` debug
+   log messages now name `CustomSitesService` instead of `PresetService`.
 6. **Wrong packages** — `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
    `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy, unused) exist only for
    `PasswordHasher<T>`. Replace with `Rfc2898DeriveBytes.Pbkdf2` and delete both.

@@ -1,4 +1,5 @@
 ﻿using Nimbus_Internet_Blocker.Models;
+using Nimbus_Internet_Blocker.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -61,59 +62,53 @@ namespace Nimbus_Internet_Blocker.Services
                 return livePath;
         }
 
-        public async Task<PresetsRoot> LoadAsync() // PATH: "C:\Users\danie\AppData\Local\User Name\com.companyname.nimbusinternetblocker\Data\presets.json"
+        /// <summary>
+        /// Loads the live presets file. Returns <see langword="null"/> when the file
+        /// exists but cannot be read or parsed — callers must treat null as "do not
+        /// touch disk", never as an empty config (that would be a data-loss path).
+        /// </summary>
+        public async Task<PresetsRoot?> LoadAsync()
         {
             try
             {
-                await EnsureLiveFileExistsAsync(); // Make sure there is a usable presets file in AppData
+                await EnsureLiveFileExistsAsync();
 
-                string livePath = GetLivePath();
-                string json = await File.ReadAllTextAsync(livePath);
+                string json = await File.ReadAllTextAsync(GetLivePath());
+                if (string.IsNullOrWhiteSpace(json)) return null;
 
-                if (string.IsNullOrWhiteSpace(json))
-                {
-                    return new PresetsRoot();
-                }
+                var root = JsonSerializer.Deserialize<PresetsRoot>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (root is null) return null;
 
-                // Convert the Json text into the model
-                var root = JsonSerializer.Deserialize<PresetsRoot>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                if(root == null)
-                {
-                    return new PresetsRoot();
-                }
-
-                NormalizePresets(root); // Clean up bad or missing vaules so the UI and Apply step are safer
-
-                return root ?? new PresetsRoot();
+                NormalizePresets(root);
+                return root;
             }
-
             catch (Exception ex)
             {
                 Debug.WriteLine($"PresetService.LoadAsync failed: {ex}");
-                return new PresetsRoot(); 
+                return null;
             }
         }
 
-        public async Task SaveAsync(PresetsRoot root)
+        /// <summary>
+        /// Normalizes and saves the presets atomically. Returns <see langword="false"/>
+        /// on failure; the previous file is left intact.
+        /// </summary>
+        public async Task<bool> SaveAsync(PresetsRoot root)
         {
+            if (root is null) return false;
 
-            if (root == null)
-            {
-                return;
-            }
             try
             {
-                string livePath = GetLivePath();
-
-                NormalizePresets(root); // Clean the file befire saving
-
-                var json = JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true}); // Turn the model back into Json and save
-                await File.WriteAllTextAsync(livePath, json);
+                NormalizePresets(root);
+                var json = JsonSerializer.Serialize(root,
+                    new JsonSerializerOptions { WriteIndented = true });
+                return await AtomicFile.WriteAllTextAtomicAsync(GetLivePath(), json);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                Debug.WriteLine(message: $"PresetService.SaveAsync has failed: {ex}");
+                Debug.WriteLine($"PresetService.SaveAsync failed: {ex}");
+                return false;
             }
         }
 

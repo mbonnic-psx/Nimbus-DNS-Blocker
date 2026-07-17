@@ -28,7 +28,7 @@ Fix the verified bugs before anything new. All are listed with detail in CLAUDE.
       one on screen. (~1 day; the single worst flaw in the app)
 - [x] **Truthful apply feedback** — `IHostsFileService.ApplyAsync` returns `bool`;
       `Blocking.razor` branches on it; delete the dead `_preApplySnapshot` logic. (~½ day)
-- [ ] **Safe persistence** — atomic saves (temp file + `File.Replace`) in both config
+- [x] **Safe persistence** — atomic saves (temp file + `File.Replace`) in both config
       services; failed `LoadAsync` must not return an empty root that a later save
       persists; save failures surface via snackbar. (~1 day)
 - [ ] **Restore / Unblock All** — Settings button that empties the Nimbus section (or

@@ -73,7 +73,7 @@
 
                 <button class="btn btn-primary"
                         type="button"
-                        @onclick="AddCustomAsync">
+                        @onclick="AddCustom">
                     Add
                 </button>
             </div>
@@ -102,14 +102,14 @@
                                 <label class="switch" title="Enable/disable @site.Host">
                                     <input type="checkbox"
                                            checked="@(site.Enabled ?? true)"
-                                           @onchange="async e => await ToggleCustomEnabledAsync(site, e)" />
+                                           @onchange="e => ToggleCustomEnabled(site, e)" />
                                     <span class="slider"></span>
                                 </label>
 
                                 <button class="btn btn-remove"
                                         type="button"
                                         title="Remove @site.Host"
-                                        @onclick="async () => await RemoveCustomAsync(site.Host)">
+                                        @onclick="() => RemoveCustom(site.Host)">
                                     🗑
                                 </button>
                             </div>
@@ -190,9 +190,16 @@
     protected override async Task OnInitializedAsync()
     {
         _presets = await PresetService.LoadAsync();
+        if (_presets is null)
+            Snackbar.Error("Load failed",
+                "Couldn't read your saved categories (presets.json). Editing is disabled until it's fixed or deleted.");
+
         _categoryCount = _presets?.Categories?.Count ?? 0;
 
         _customRoot = await CustomSitesService.LoadAsync();
+        if (_customRoot is null)
+            Snackbar.Error("Load failed",
+                "Couldn't read your saved custom sites (custom.json). Editing is disabled until it's fixed or deleted.");
     }
 
     // ── Category Management ────────────────────────────────────────────────────
@@ -215,30 +222,31 @@
 
     // ── Custom Sites ───────────────────────────────────────────────────────────
 
-    private async Task AddCustomAsync()
+    private void AddCustom()
     {
         ClearApplyStatus();
         _customMessage = "";
 
-        if (_customRoot == null)
-            _customRoot = await CustomSitesService.LoadAsync();
+        if (_customRoot is null)
+        {
+            _customMessage = "Custom sites are unavailable — the saved config failed to load.";
+            return;
+        }
 
-        var (success, message, updatedRoot) = await CustomSitesService.AddCustomSite(_customInput);
-
-        _customRoot    = updatedRoot;
+        var (success, message) = CustomSitesService.AddSite(_customRoot, _customInput);
         _customMessage = message;
 
         if (success)
             _customInput = "";
     }
 
-    private async Task RemoveCustomAsync(string host)
+    private void RemoveCustom(string host)
     {
         ClearApplyStatus();
 
-        var (success, message, updatedRoot) = await CustomSitesService.RemoveCustomSiteAsync(host);
+        if (_customRoot is null) return;
 
-        _customRoot = updatedRoot;
+        var (success, message) = CustomSitesService.RemoveSite(_customRoot, host);
 
         if (success)
             Snackbar.Success("Site removed", message);
@@ -246,27 +254,26 @@
             Snackbar.Error("Remove failed", message);
     }
 
-    private async Task ToggleCustomEnabledAsync(CustomEntry site, ChangeEventArgs e)
+    /*
+     * ToggleCustomEnabled()
+     * Pending in-memory flip, exactly like category toggles — persisted only by
+     * ApplyPendingAsync; discarded by cancel or navigation.
+     */
+    private void ToggleCustomEnabled(CustomEntry site, ChangeEventArgs e)
     {
         ClearApplyStatus();
 
-        if (_customRoot is null) return;
-
-        bool newValue = false;
-
-        if (e.Value is bool b) newValue = b;
-        else if (e.Value is string s && bool.TryParse(s, out var parsed)) newValue = parsed;
+        bool newValue = e.Value is bool b
+            ? b
+            : e.Value is string s && bool.TryParse(s, out var parsed) && parsed;
 
         site.Enabled = newValue;
-
-        CustomSitesService.NormalizeCustoms(_customRoot);
-        await CustomSitesService.SaveAsync(_customRoot);
     }
 
-    private async Task OnCustomInputKeyDown(KeyboardEventArgs e)
+    private void OnCustomInputKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            await AddCustomAsync();
+            AddCustom();
     }
 
     // ── Apply Logic ────────────────────────────────────────────────────────────
@@ -305,27 +312,46 @@
 
     /*
      * ApplyPendingAsync()
-     * Persists the pending category toggles, then writes the hosts file.
-     * Invariant: the presets file is only ever written here, so outside an apply
-     * it always describes the last-applied state — which is what OnModalCancelled
-     * reloads on cancel. If the hosts write fails, the previous config is written
-     * back so the invariant survives failure (pending flips stay visible in the
-     * UI for a retry).
+     * Persists the pending category and custom-site changes, then writes the hosts
+     * file. Invariant: the config files are only ever written here, so outside an
+     * apply they always describe the last-applied state — which is what
+     * OnModalCancelled reloads on cancel. Saves are atomic; on any failure the
+     * last-applied configs are written back so the invariant survives, while the
+     * pending changes stay visible in the UI for a retry.
      */
     private async Task ApplyPendingAsync()
     {
         _isApplying = true;
         StateHasChanged();
 
-        var lastApplied = await PresetService.LoadAsync();
+        var lastAppliedPresets = await PresetService.LoadAsync();
+        var lastAppliedCustoms = await CustomSitesService.LoadAsync();
 
-        if (_presets is not null)
-            await PresetService.SaveAsync(_presets);
+        bool applied = false;
 
-        bool applied = await HostsFileService.ApplyAsync();
+        if (_presets is null || _customRoot is null ||
+            lastAppliedPresets is null || lastAppliedCustoms is null)
+        {
+            Snackbar.Error("Apply aborted",
+                "Your saved configuration couldn't be read — nothing was changed.");
+        }
+        else if (!await PresetService.SaveAsync(_presets) ||
+                 !await CustomSitesService.SaveAsync(_customRoot))
+        {
+            Snackbar.Error("Save failed", "Couldn't save your changes — nothing was applied.");
+            await PresetService.SaveAsync(lastAppliedPresets);       // best-effort rollback
+            await CustomSitesService.SaveAsync(lastAppliedCustoms);  // (atomic saves keep old file on failure)
+        }
+        else
+        {
+            applied = await HostsFileService.ApplyAsync();
 
-        if (!applied)
-            await PresetService.SaveAsync(lastApplied);
+            if (!applied)
+            {
+                await PresetService.SaveAsync(lastAppliedPresets);
+                await CustomSitesService.SaveAsync(lastAppliedCustoms);
+            }
+        }
 
         _applyStatusMessage = applied
             ? "Changes applied successfully"
@@ -339,13 +365,24 @@
      * OnModalCancelled()
      * The user backed out of the unlock modal without authenticating. Pending
      * flips were never saved, so reloading from disk restores the last-applied
-     * state exactly.
+     * state exactly. If the reload itself fails, the current in-memory state is
+     * kept rather than blanking the page.
      */
     private async Task OnModalCancelled()
     {
         _showUnlockModal = false;
 
-        _presets       = await PresetService.LoadAsync();
+        var presets = await PresetService.LoadAsync();
+        var customs = await CustomSitesService.LoadAsync();
+
+        if (presets is null || customs is null)
+        {
+            Snackbar.Error("Revert failed", "Couldn't reload the last-applied configuration.");
+            return;
+        }
+
+        _presets       = presets;
+        _customRoot    = customs;
         _categoryCount = _presets?.Categories?.Count ?? 0;
         StateHasChanged();
     }

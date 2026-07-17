@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Nimbus_Internet_Blocker.Models;
+using Nimbus_Internet_Blocker.Utilities;
 
 namespace Nimbus_Internet_Blocker.Services
 {
@@ -47,7 +48,7 @@ namespace Nimbus_Internet_Blocker.Services
 
             if (string.IsNullOrWhiteSpace(seedJson))
             {
-                seedJson = "{ \"categories\": {} }"; // If the file could not be read default to an empty preset file
+                seedJson = "{ \"sites\": [] }"; // If the file could not be read default to an empty custom sites file
             }
 
             var folder = Path.GetDirectoryName(livePath);
@@ -61,59 +62,53 @@ namespace Nimbus_Internet_Blocker.Services
             return livePath;
         }
 
-        public async Task<CustomsRoot> LoadAsync() // PATH: "C:\Users\danie\AppData\Local\User Name\com.companyname.nimbusinternetblocker\Data\presets.json"
+        /// <summary>
+        /// Loads the live custom sites file. Returns <see langword="null"/> when the file
+        /// exists but cannot be read or parsed — callers must treat null as "do not
+        /// touch disk", never as an empty config (that would be a data-loss path).
+        /// </summary>
+        public async Task<CustomsRoot?> LoadAsync()
         {
             try
             {
-                await EnsureLiveFileExistsAsync(); // Make sure there is a usable presets file in AppData
+                await EnsureLiveFileExistsAsync();
 
-                string livePath = GetLivePath();
-                string json = await File.ReadAllTextAsync(livePath);
+                string json = await File.ReadAllTextAsync(GetLivePath());
+                if (string.IsNullOrWhiteSpace(json)) return null;
 
-                if (string.IsNullOrWhiteSpace(json))
-                {
-                    return new CustomsRoot();
-                }
+                var root = JsonSerializer.Deserialize<CustomsRoot>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (root is null) return null;
 
-                // Convert the Json text into the model
-                var root = JsonSerializer.Deserialize<CustomsRoot>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                if (root == null)
-                {
-                    return new CustomsRoot();
-                }
-
-                NormalizeCustoms(root); // Clean up bad or missing vaules so the UI and Apply step are safer
-
-                return root ?? new CustomsRoot();
+                NormalizeCustoms(root);
+                return root;
             }
-
             catch (Exception ex)
             {
-                Debug.WriteLine($"PresetService.LoadAsync failed: {ex}");
-                return new CustomsRoot();
+                Debug.WriteLine($"CustomSitesService.LoadAsync failed: {ex}");
+                return null;
             }
         }
 
-        public async Task SaveAsync(CustomsRoot root)
+        /// <summary>
+        /// Normalizes and saves the custom sites atomically. Returns <see langword="false"/>
+        /// on failure; the previous file is left intact.
+        /// </summary>
+        public async Task<bool> SaveAsync(CustomsRoot root)
         {
+            if (root is null) return false;
 
-            if (root == null)
-            {
-                return;
-            }
             try
             {
-                string livePath = GetLivePath();
-
-                NormalizeCustoms(root); // Clean the file before saving
-
-                var json = JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }); // Turn the model back into Json and save
-                await File.WriteAllTextAsync(livePath, json);
+                NormalizeCustoms(root);
+                var json = JsonSerializer.Serialize(root,
+                    new JsonSerializerOptions { WriteIndented = true });
+                return await AtomicFile.WriteAllTextAtomicAsync(GetLivePath(), json);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(message: $"PresetService.SaveAsync has failed: {ex}");
+                Debug.WriteLine($"CustomSitesService.SaveAsync failed: {ex}");
+                return false;
             }
         }
 
@@ -149,53 +144,45 @@ namespace Nimbus_Internet_Blocker.Services
                 .ToList();
         }
 
-        public async Task<(bool success, string message, CustomsRoot updatedRoot)> AddCustomSite(string inputHost)
+        /// <summary>
+        /// Validates and adds a host to <paramref name="root"/> in memory. Nothing is
+        /// saved — pending changes persist at apply time (see Blocking.razor).
+        /// </summary>
+        public (bool success, string message) AddSite(CustomsRoot root, string inputHost)
         {
-            CustomsRoot root = await LoadAsync(); // Load the existing custom sites
+            var normalizedHost = NormalizeHost(inputHost);
 
-            var normalizedHost = NormalizeHost(inputHost); // Normalize the input host
+            if (string.IsNullOrWhiteSpace(normalizedHost) || !normalizedHost.Contains('.'))
+                return (false, "Enter a valid host like example.com.");
 
-            if (string.IsNullOrWhiteSpace(normalizedHost) || !normalizedHost.Contains("."))
-            {
-                return (false, "The host cannot be empty or contain any whitespace and must include a \".\"", root); // Basic Validation if there is no host entered and if there is whitespace only
-            }
             if (root.Sites.Any(s => string.Equals(s.Host, normalizedHost, StringComparison.OrdinalIgnoreCase)))
-            {
-                return (false, "This host already exists in your custom sites.", root); // Check for duplicates
-            }
+                return (false, "This host already exists in your custom sites.");
 
-            var newSite = new CustomEntry { Host = normalizedHost, Enabled = true, Ipv4 = "0.0.0.0", Ipv6 = "::" }; // Create a new custom site entry
-
-            root.Sites.Add(newSite); // Add the new site to the list
-
+            root.Sites.Add(new CustomEntry { Host = normalizedHost, Enabled = true, Ipv4 = "0.0.0.0", Ipv6 = "::" });
             NormalizeCustoms(root);
 
-            await SaveAsync (root); // Save the updated root back to the file
-
-            return (true, "Custom site added successfully.", root);
+            return (true, $"{normalizedHost} added — click Apply Blocking Rules to activate.");
         }
 
-        public async Task<(bool success, string message, CustomsRoot updatedRoot)> RemoveCustomSiteAsync(string host)
+        /// <summary>
+        /// Removes a host from <paramref name="root"/> in memory. Nothing is saved —
+        /// pending changes persist at apply time.
+        /// </summary>
+        public (bool success, string message) RemoveSite(CustomsRoot root, string host)
         {
-            CustomsRoot root = await LoadAsync(); // Load the current custom sites
-
-            var normalizedHost = NormalizeHost(host); // Normalize for consistent comparison
+            var normalizedHost = NormalizeHost(host);
 
             if (string.IsNullOrWhiteSpace(normalizedHost))
-                return (false, "Invalid host provided.", root);
+                return (false, "Invalid host provided.");
 
-            bool exists = root.Sites.Any(s => string.Equals(s.Host, normalizedHost, StringComparison.OrdinalIgnoreCase));
-
-            if (!exists)
-                return (false, $"{normalizedHost} was not found in your custom sites.", root);
-
+            var before = root.Sites.Count;
             root.Sites = root.Sites
                 .Where(s => !string.Equals(s.Host, normalizedHost, StringComparison.OrdinalIgnoreCase))
-                .ToList(); // Filter out the matching entry
+                .ToList();
 
-            await SaveAsync(root); // Persist the updated list
-
-            return (true, $"{normalizedHost} removed from your custom sites.", root);
+            return before == root.Sites.Count
+                ? (false, $"{normalizedHost} was not found in your custom sites.")
+                : (true, $"{normalizedHost} removed — apply to update your blocking rules.");
         }
 
         private async Task<string> ReadSeedTextAsync(string seedFileName)
