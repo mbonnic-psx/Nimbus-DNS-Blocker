@@ -18,18 +18,21 @@ public sealed class HostsFileService : IHostsFileService
     private const string BackupPath    = @"C:\Windows\System32\drivers\etc\hosts.nimbus.bak";
 
     // ── Dependencies ───────────────────────────────────────────────────────────
-    private readonly PresetService      _presetService;
-    private readonly CustomSitesService _customSitesService;
-    private readonly ISnackbarService   _snackbar;
+    private readonly PresetService         _presetService;
+    private readonly CustomSitesService    _customSitesService;
+    private readonly ISnackbarService      _snackbar;
+    private readonly IBrowserPolicyService _browserPolicy;
 
     public HostsFileService(
-        PresetService      presetService,
-        CustomSitesService customSitesService,
-        ISnackbarService   snackbar)
+        PresetService         presetService,
+        CustomSitesService    customSitesService,
+        ISnackbarService      snackbar,
+        IBrowserPolicyService browserPolicy)
     {
         _presetService      = presetService;
         _customSitesService = customSitesService;
         _snackbar           = snackbar;
+        _browserPolicy      = browserPolicy;
     }
 
     // ── IHostsFileService ──────────────────────────────────────────────────────
@@ -89,6 +92,20 @@ public sealed class HostsFileService : IHostsFileService
             FlushDns();
 
             _snackbar.Success("Rules applied", "All enabled categories and custom sites are now active.");
+
+            // DoH policies ride along with apply: browsers with Secure DNS enabled
+            // bypass the hosts file entirely, so blocking isn't real without this.
+            bool policiesOk = _browserPolicy.IsEnabled
+                ? await _browserPolicy.WritePoliciesAsync()
+                : await _browserPolicy.RemovePoliciesAsync();
+
+            if (!policiesOk)
+                _snackbar.Warn("Browser policies",
+                    "Blocking was applied, but the browser Secure-DNS policies couldn't be updated.");
+            else if (_browserPolicy.IsEnabled)
+                _snackbar.Info("Restart your browser",
+                    "Secure DNS has been disabled by policy — restart open browsers for it to take effect.");
+
             return true;
         }
         catch (UnauthorizedAccessException)
@@ -131,6 +148,11 @@ public sealed class HostsFileService : IHostsFileService
                 // No Nimbus section present — nothing to remove, still a successful unblock.
                 FlushDns();
                 _snackbar.Success("Blocking removed", "All Nimbus blocking rules have been removed.");
+
+                if (!await _browserPolicy.RemovePoliciesAsync())
+                    _snackbar.Warn("Browser policies",
+                        "Blocking was removed, but the Secure-DNS policies couldn't be cleaned up.");
+
                 return true;
             }
 
@@ -140,6 +162,10 @@ public sealed class HostsFileService : IHostsFileService
             FlushDns();
 
             _snackbar.Success("Blocking removed", "All Nimbus blocking rules have been removed.");
+
+            if (!await _browserPolicy.RemovePoliciesAsync())
+                _snackbar.Warn("Browser policies",
+                    "Blocking was removed, but the Secure-DNS policies couldn't be cleaned up.");
             return true;
         }
         catch (UnauthorizedAccessException)

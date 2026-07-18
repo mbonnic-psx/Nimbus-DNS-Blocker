@@ -43,14 +43,14 @@ Fix the verified bugs before anything new. All are listed with detail in CLAUDE.
 The feature that makes the app actually work in modern browsers, and the headline for
 the release: "blocks sites even with Secure DNS enabled."
 
-- [ ] New `BrowserPolicyService` (behind an interface) that writes registry policies on
+- [x] New `BrowserPolicyService` (behind an interface) that writes registry policies on
       apply and removes them on Restore/Unblock All:
       - Chrome: `HKLM\SOFTWARE\Policies\Google\Chrome` → `DnsOverHttpsMode = "off"`
       - Edge:   `HKLM\SOFTWARE\Policies\Microsoft\Edge` → `DnsOverHttpsMode = "off"`
       - Firefox: `HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS` → `Enabled = 0`
 - [ ] Test against real installed browsers (verify blocked site fails with policy on,
       resolves with it off).
-- [ ] Settings toggle + honest explanation text ("Nimbus disables browser Secure DNS so
+- [x] Settings toggle + honest explanation text ("Nimbus disables browser Secure DNS so
       system blocking works; removed when you unblock everything").
 
 ### Phase 2 — Cleanup & rename (~1 week)

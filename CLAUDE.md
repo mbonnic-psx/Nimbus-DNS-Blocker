@@ -59,8 +59,10 @@ Nimbus-DNS-Blocker/
 │   ├── CustomsRoot.cs               # User-added custom sites
 │   └── JsonLoad.cs                  # EMPTY placeholder — delete or use
 ├── Services/
-│   ├── HostsFileService.cs          # Hosts read/write/backup/splice + DNS flush (DONE)
+│   ├── HostsFileService.cs          # Hosts read/write/backup/splice/restore + DNS flush (DONE)
 │   ├── IHostsFileService.cs
+│   ├── BrowserPolicyService.cs      # HKLM Secure-DNS-off policies (Chrome/Edge/Firefox) (DONE)
+│   ├── IBrowserPolicyService.cs
 │   ├── PresetService.cs             # Category blocklist load/save/normalize (no interface yet)
 │   ├── CustomSitesService.cs        # Custom sites CRUD (no interface yet)
 │   ├── PasswordService.cs           # Modes, PBKDF2 hash, guardian code generation
@@ -224,6 +226,7 @@ builder.Services.AddSingleton<ISnackbarService, SnackbarService>();
 builder.Services.AddSingleton<QuoteService>();
 builder.Services.AddSingleton<PresetService>();
 builder.Services.AddSingleton<CustomSitesService>();
+builder.Services.AddSingleton<IBrowserPolicyService, BrowserPolicyService>();  // Windows-only, CA1416 suppressed
 builder.Services.AddSingleton<IHostsFileService, HostsFileService>();  // Windows-only, CA1416 suppressed
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 ```
@@ -253,6 +256,9 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       (`HostsSection.Remove`, unit tested), disables every category and custom site in
       sync so disk keeps describing the applied state, gated behind the unlock modal when
       a protection mode is active, flushes DNS
+- [x] DoH bypass fix — `BrowserPolicyService` writes/removes HKLM Secure-DNS-off policies
+      for Chrome, Edge, and Firefox alongside Apply/Restore, with a Settings toggle and
+      surgical (match-before-delete) policy removal
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -303,8 +309,21 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    preserving list membership so the disk-equals-applied-state invariant (slices 003/004)
    holds after the unblock. Gated behind the unlock modal when a protection mode is active,
    same as Apply; does not remove the protection mode itself.
-9. **DoH bypass** — Chrome/Edge/Firefox secure DNS skips the hosts file. Fix via browser
-   policy registry keys (see PLAN.md, Track 1).
+9. ~~**DoH bypass**~~ — **RESOLVED.** `IBrowserPolicyService`/`BrowserPolicyService` write
+   three HKLM policy values to force browser Secure DNS off:
+   `SOFTWARE\Policies\Google\Chrome\DnsOverHttpsMode` = `"off"`,
+   `SOFTWARE\Policies\Microsoft\Edge\DnsOverHttpsMode` = `"off"`, and
+   `SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS\Enabled` = `0` (DWORD). Lifecycle:
+   written (or removed, if the preference is off) during `HostsFileService.ApplyAsync`;
+   always removed during `RestoreAsync`. Removal is surgical — a value is only deleted
+   when its current data still equals what Nimbus wrote, so an administrator's own policy
+   is never clobbered; the Firefox `DNSOverHTTPS` subkey is deleted only when Nimbus's
+   value was the last thing in it. Preference lives in MAUI Preferences
+   (`nimbus_doh_policies_enabled`, default **true**) and is surfaced as a Settings toggle
+   that only stores the preference — the registry itself is touched at apply/restore time,
+   inside the already-elevated hosts-file path. A policy write/removal failure is a warning
+   snackbar only; it never fails the apply or restore. Windows-only
+   (`[SupportedOSPlatform("windows")]`), same as `HostsFileService`.
 10. ~~**No tests**~~ — **RESOLVED for the two pure functions.** `SpliceSection` (now
     `Utilities/HostsSection.Splice`) and `NormalizeHost` (now
     `Utilities/HostValidation.NormalizeHost`) were extracted out of `HostsFileService`/

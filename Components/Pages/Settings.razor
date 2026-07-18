@@ -4,6 +4,7 @@
 @inject IHostsFileService HostsFileService
 @inject PresetService PresetService
 @inject CustomSitesService CustomSitesService
+@inject IBrowserPolicyService BrowserPolicyService
 
 <div class="settings-page">
 
@@ -29,6 +30,28 @@
                 @onclick="OnRestoreClicked">
             @(_isRestoring ? "Restoring…" : "Restore / Unblock All")
         </button>
+    </div>
+
+    <!-- ── Browser Secure DNS ──────────────────────────────────────────────── -->
+    <div class="card card-pad">
+        <h2 class="pw-heading">Browser Secure DNS</h2>
+        <p class="subhead">
+            Chrome, Edge, and Firefox can bypass blocking entirely via "Secure DNS"
+            (DNS over HTTPS). When this switch is on, applying blocking rules also
+            disables Secure DNS in those browsers through a system policy, so the
+            blocks actually work. The policy is removed when you use
+            Restore / Unblock All. Browsers must be restarted to notice the change.
+        </p>
+
+        <div class="category-row">
+            <div class="category-name">Disable browser Secure DNS while blocking</div>
+            <label class="switch" title="Disable browser Secure DNS while blocking">
+                <input type="checkbox"
+                       checked="@_dohPoliciesEnabled"
+                       @onchange="OnDohToggleChangedAsync" />
+                <span class="slider"></span>
+            </label>
+        </div>
     </div>
 
     <!-- ── Password Protection ─────────────────────────────────────────────── -->
@@ -229,12 +252,15 @@
     private UnlockPurpose _unlockPurpose = UnlockPurpose.RemoveProtection;
     private bool _isRestoring = false;
 
+    private bool _dohPoliciesEnabled;
+
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     protected override void OnInitialized()
     {
         _passwordEnabled      = PasswordService.IsPasswordEnabled();
         _accountabilityActive = PasswordService.IsAccountabilityModeActive();
+        _dohPoliciesEnabled   = BrowserPolicyService.IsEnabled;
     }
 
     // ── Mode Selection ─────────────────────────────────────────────────────────
@@ -494,6 +520,27 @@
 
         _isRestoring = false;
         StateHasChanged();
+    }
+
+    // ── Browser Secure DNS ─────────────────────────────────────────────────────
+
+    /*
+     * OnDohToggleChangedAsync()
+     * Stores the preference only — the registry is touched at apply/restore time,
+     * inside the elevated hosts-file path (see HostsFileService).
+     */
+    private async Task OnDohToggleChangedAsync(ChangeEventArgs e)
+    {
+        bool enabled = e.Value is bool b
+            ? b
+            : e.Value is string s && bool.TryParse(s, out var parsed) && parsed;
+
+        _dohPoliciesEnabled = enabled;
+        await BrowserPolicyService.SetEnabledAsync(enabled);
+
+        Snackbar.Info("Secure DNS setting saved", enabled
+            ? "Secure DNS will be disabled the next time you apply blocking rules."
+            : "The policies will be removed the next time you apply or restore.");
     }
 
     /*
