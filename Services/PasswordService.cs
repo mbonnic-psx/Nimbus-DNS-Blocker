@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+using Nimbus_Internet_Blocker.Utilities;
 using System.Security.Cryptography;
 
 namespace Nimbus_Internet_Blocker.Services
@@ -82,8 +82,8 @@ namespace Nimbus_Internet_Blocker.Services
         /*
          * SetPasswordAsync()
          * Guardian mode only. Validates the password against all rules,
-         * hashes it using PasswordHasher<string> (PBKDF2 with random salt),
-         * and stores the resulting hash string in Preferences.
+         * hashes it via Utilities/PasswordHash (PBKDF2, self-describing
+         * v1.iterations.salt.subkey string), and stores the result in Preferences.
          * Always records the mode as Guardian and clears the accountability flag.
          *
          * When recoveryCode is provided (initial Guardian setup), its PBKDF2 hash
@@ -114,12 +114,9 @@ namespace Nimbus_Internet_Blocker.Services
                 return Task.FromResult((false, "Password must contain at least one special character."));
 
             // ── Hashing ────────────────────────────────────────────────────────
-            /*
-             * PasswordHasher uses PBKDF2 with a cryptographically random salt.
-             * The salt and derived key are combined into one Base64 string automatically.
-             * "nimbus" is the user object stand-in — we have no real identity objects.
-             */
-            var hash = new PasswordHasher<string>().HashPassword("nimbus", password);
+            // PBKDF2 via Utilities/PasswordHash — a self-describing
+            // v1.iterations.salt.subkey string; see that file for the format.
+            var hash = PasswordHash.Hash(password);
 
             // ── Persist ────────────────────────────────────────────────────────
             Preferences.Set(PREF_HASH, hash);
@@ -132,7 +129,7 @@ namespace Nimbus_Internet_Blocker.Services
             // the guardian already holds.
             if (!string.IsNullOrWhiteSpace(recoveryCode))
             {
-                var recoveryHash = new PasswordHasher<string>().HashPassword("nimbus", recoveryCode);
+                var recoveryHash = PasswordHash.Hash(recoveryCode);
                 Preferences.Set(PREF_RECOVERY_HASH, recoveryHash);
             }
 
@@ -143,41 +140,30 @@ namespace Nimbus_Internet_Blocker.Services
 
         /*
          * VerifyPassword()
-         * Re-hashes the attempt using the salt embedded in the stored hash string
-         * and compares the result. Returns true if they match, false otherwise.
-         *
-         * SuccessRehashNeeded means the password matched but was hashed with
-         * older PBKDF2 parameters — treated as success; we do not upgrade hashes here.
+         * Verifies the attempt against the stored hash via PasswordHash.Verify —
+         * PBKDF2 with the salt/iteration count embedded in the stored string.
          */
         public bool VerifyPassword(string attempt)
         {
             if (!IsPasswordEnabled()) return false;
 
             var storedHash = Preferences.Get(PREF_HASH, string.Empty);
-
-            var result = new PasswordHasher<string>()
-                .VerifyHashedPassword("nimbus", storedHash, attempt);
-
-            return result == PasswordVerificationResult.Success ||
-                   result == PasswordVerificationResult.SuccessRehashNeeded;
+            return PasswordHash.Verify(attempt, storedHash);
         }
 
         /*
          * VerifyRecoveryCode()
-         * Re-hashes the typed code with the salt embedded in the stored recovery hash
-         * and compares. Trims surrounding whitespace but preserves case and dashes,
-         * which are significant. Returns false when no recovery hash is stored.
+         * Verifies the typed code against the stored recovery hash via
+         * PasswordHash.Verify. Trims surrounding whitespace but preserves case
+         * and dashes, which are significant. Returns false when no recovery
+         * hash is stored.
          */
         public bool VerifyRecoveryCode(string attempt)
         {
             var storedHash = Preferences.Get(PREF_RECOVERY_HASH, string.Empty);
             if (string.IsNullOrEmpty(storedHash)) return false;
 
-            var result = new PasswordHasher<string>()
-                .VerifyHashedPassword("nimbus", storedHash, attempt.Trim());
-
-            return result == PasswordVerificationResult.Success ||
-                   result == PasswordVerificationResult.SuccessRehashNeeded;
+            return PasswordHash.Verify(attempt.Trim(), storedHash);
         }
 
         /*

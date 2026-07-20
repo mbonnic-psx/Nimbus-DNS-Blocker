@@ -16,6 +16,7 @@
     <ItemGroup>
         <Compile Include="..\Utilities\HostValidation.cs" Link="src\HostValidation.cs" />
         <Compile Include="..\Utilities\HostsSection.cs"   Link="src\HostsSection.cs" />
+        <Compile Include="..\Utilities\PasswordHash.cs"   Link="src\PasswordHash.cs" />
     </ItemGroup>
 
 </Project>

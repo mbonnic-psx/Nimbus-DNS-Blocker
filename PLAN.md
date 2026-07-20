@@ -60,7 +60,7 @@ the release: "blocks sites even with Secure DNS enabled."
       `ApplicationId` (`com.companyname.*` must go), window title, README.
 - [ ] Trim `TargetFrameworks` to Windows only; delete unused `Platforms/` folders;
       remove the CA1416 pragma.
-- [ ] Drop `Microsoft.AspNetCore.Identity` + `Microsoft.AspNet.Identity.Core`; replace
+- [x] Drop `Microsoft.AspNetCore.Identity` + `Microsoft.AspNet.Identity.Core`; replace
       `PasswordHasher<T>` with `Rfc2898DeriveBytes.Pbkdf2` (keep verifying old-format
       hashes or just require re-setup — one-time decision, note it in release notes).
 - [ ] Deduplicate `PresetService`/`CustomSitesService` shared logic into
@@ -89,6 +89,9 @@ the release: "blocks sites even with Secure DNS enabled."
 - Guardian recovery verification changed: guardian users who set up before this build
   must remove and re-add Guardian mode to get a verifiable recovery code; old recovery
   codes were never stored and cannot be verified.
+- Password hashing moved to built-in PBKDF2. Hashes from earlier builds are not
+  compatible; Guardian users (and anyone with a password set) must re-set their
+  password and recovery code.
 
 ### Phase 4 — Funnel (non-code, ongoing)
 

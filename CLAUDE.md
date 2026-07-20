@@ -32,7 +32,7 @@ fixing that via browser policy registry keys is a top roadmap item (see PLAN.md)
 |Styling|Custom CSS — neumorphic design in `wwwroot/css/app.css`|
 |Storage|JSON via `System.Text.Json` in `%LOCALAPPDATA%`; flags/hash in MAUI `Preferences`|
 |DI|`Microsoft.Extensions.DependencyInjection` via `MauiProgram.cs`|
-|Password hashing|PBKDF2 via `PasswordHasher<T>` (ASP.NET Identity packages — slated for removal, see Tech Debt)|
+|Password hashing|PBKDF2 via `Rfc2898DeriveBytes.Pbkdf2` (`Utilities/PasswordHash.cs`)|
 
 ---
 
@@ -74,7 +74,8 @@ Nimbus-DNS-Blocker/
 ├── Utilities/
 │   ├── AtomicFile.cs                # Crash-safe temp-file + File.Replace writes (DONE)
 │   ├── HostValidation.cs            # Shared NormalizeHost — used by both config services (DONE)
-│   └── HostsSection.cs              # Pure hosts-block splice logic, extracted for testability (DONE)
+│   ├── HostsSection.cs              # Pure hosts-block splice logic, extracted for testability (DONE)
+│   └── PasswordHash.cs              # PBKDF2 hash/verify, self-describing v1 string (DONE)
 ├── Resources/Raw/
 │   ├── presets.seed.json            # Default categories (ships with app)
 │   └── custom.seed.json             # Default custom sites
@@ -83,8 +84,9 @@ Nimbus-DNS-Blocker/
 │   ├── css/js/rain.js               # Background effect (yes, JS lives under css/ — move someday)
 │   └── index.html
 ├── Platforms/                       # Android/iOS/MacCatalyst/Tizen scaffolding — unused, Windows only
-├── Nimbus.Tests/                    # Plain net9.0 xUnit project — compiles Utilities/*.cs directly,
-│                                     # no MAUI dependency, runs on Windows or Linux (DONE)
+├── Nimbus.Tests/                    # Plain net9.0 xUnit project — compiles Utilities/*.cs directly
+│                                     # (HostValidation, HostsSection, PasswordHash), no MAUI
+│                                     # dependency, runs on Windows or Linux (DONE)
 ├── MauiProgram.cs                   # Entry point + DI registrations
 └── App.xaml.cs
 ```
@@ -259,6 +261,9 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 - [x] DoH bypass fix — `BrowserPolicyService` writes/removes HKLM Secure-DNS-off policies
       for Chrome, Edge, and Firefox alongside Apply/Restore, with a Settings toggle and
       surgical (match-before-delete) policy removal
+- [x] Dropped the EOL/legacy Identity packages — `PasswordHasher<T>` replaced by
+      `Utilities/PasswordHash` (PBKDF2-HMAC-SHA256, 600k iterations, self-describing
+      `v1.iterations.salt.subkey` string), covered by `Nimbus.Tests/PasswordHashTests.cs`
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -295,9 +300,13 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    log messages now name `CustomSitesService` instead of `PresetService`. Remaining dedup
    (seed plumbing — `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) is still open for
    Phase 2.
-6. **Wrong packages** — `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
-   `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy, unused) exist only for
-   `PasswordHasher<T>`. Replace with `Rfc2898DeriveBytes.Pbkdf2` and delete both.
+6. ~~**Wrong packages**~~ — **RESOLVED.** `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
+   `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy) are both removed from the csproj.
+   `PasswordHasher<T>` is replaced by `Utilities/PasswordHash` (PBKDF2-HMAC-SHA256,
+   600,000 iterations, self-describing `v1.iterations.salt.subkey` string). Migration:
+   any hash not in the `v1.` format fails verification rather than being read — there
+   were no production hashes to preserve pre-release, so anyone with a password/recovery
+   code set on an earlier build must re-set it (see Release Notes in PLAN.md).
 7. **Phantom platforms** — csproj targets android/ios/maccatalyst; `HostsFileService`
    would throw on them. Trim to the Windows TFM.
 8. ~~**No restore/unblock-all feature**~~ — **RESOLVED.** Settings has a "Restore / Unblock
@@ -324,12 +333,13 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    inside the already-elevated hosts-file path. A policy write/removal failure is a warning
    snackbar only; it never fails the apply or restore. Windows-only
    (`[SupportedOSPlatform("windows")]`), same as `HostsFileService`.
-10. ~~**No tests**~~ — **RESOLVED for the two pure functions.** `SpliceSection` (now
-    `Utilities/HostsSection.Splice`) and `NormalizeHost` (now
-    `Utilities/HostValidation.NormalizeHost`) were extracted out of `HostsFileService`/
-    `PresetService`/`CustomSitesService` — both were `private` and MAUI-bound, so a plain
-    test project couldn't reach them otherwise. Covered by `Nimbus.Tests/` (plain `net9.0`
-    xUnit project, compiles the two utility files directly, no MAUI/service dependency —
+10. ~~**No tests**~~ — **RESOLVED for the pure functions.** `SpliceSection` (now
+    `Utilities/HostsSection.Splice`), `NormalizeHost` (now
+    `Utilities/HostValidation.NormalizeHost`), and `PasswordHash.Hash`/`Verify` were
+    extracted into `Utilities/` — all were previously `private`/MAUI-bound (or, for
+    `PasswordHash`, wrapped a MAUI-adjacent Identity type), so a plain test project
+    couldn't reach them otherwise. Covered by `Nimbus.Tests/` (plain `net9.0` xUnit
+    project, compiles the three utility files directly, no MAUI/service dependency —
     runs on Windows or Linux). No behavior changed by the extraction. Other code paths
     (services, Razor components) remain untested — out of scope for Phase 0.
 11. Misc: `presets.seed.json` has a stray `"exclude"` block at the top; empty
