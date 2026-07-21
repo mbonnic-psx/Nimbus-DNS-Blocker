@@ -26,7 +26,7 @@ fixing that via browser policy registry keys is a top roadmap item (see PLAN.md)
 
 |Layer|Technology|
 |---|---|
-|Framework|.NET MAUI (net9.0; Windows is the only real target — see Tech Debt)|
+|Framework|.NET MAUI (net9.0-windows10.0.19041.0 — Windows-only target)|
 |Language|C# (nullable enabled, implicit usings)|
 |UI|Blazor WebView (Razor components in `.razor` files)|
 |Styling|Custom CSS — neumorphic design in `wwwroot/css/app.css`|
@@ -56,8 +56,7 @@ Nimbus-DNS-Blocker/
 │   └── _Imports.razor
 ├── Models/
 │   ├── PresetsRoot.cs               # Categories → entries (host/ipv4/ipv6)
-│   ├── CustomsRoot.cs               # User-added custom sites
-│   └── JsonLoad.cs                  # EMPTY placeholder — delete or use
+│   └── CustomsRoot.cs               # User-added custom sites
 ├── Services/
 │   ├── HostsFileService.cs          # Hosts read/write/backup/splice/restore + DNS flush (DONE)
 │   ├── IHostsFileService.cs
@@ -81,9 +80,9 @@ Nimbus-DNS-Blocker/
 │   └── custom.seed.json             # Default custom sites
 ├── wwwroot/
 │   ├── css/app.css                  # All styles — do not inline styles in Razor
-│   ├── css/js/rain.js               # Background effect (yes, JS lives under css/ — move someday)
+│   ├── js/rain.js                   # Background effect
 │   └── index.html
-├── Platforms/                       # Android/iOS/MacCatalyst/Tizen scaffolding — unused, Windows only
+├── Platforms/Windows/                # Windows MAUI head (app.manifest carries the admin-elevation request)
 ├── Nimbus.Tests/                    # Plain net9.0 xUnit project — compiles Utilities/*.cs directly
 │                                     # (HostValidation, HostsSection, PasswordHash), no MAUI
 │                                     # dependency, runs on Windows or Linux (DONE)
@@ -264,6 +263,11 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
 - [x] Dropped the EOL/legacy Identity packages — `PasswordHasher<T>` replaced by
       `Utilities/PasswordHash` (PBKDF2-HMAC-SHA256, 600k iterations, self-describing
       `v1.iterations.salt.subkey` string), covered by `Nimbus.Tests/PasswordHashTests.cs`
+- [x] Trimmed to Windows-only — `TargetFrameworks` is just
+      `net9.0-windows10.0.19041.0`, the android/ios/maccatalyst/tizen `Platforms/`
+      folders are gone; removed empty `Models/JsonLoad.cs`, moved `rain.js` out of
+      `css/` into `wwwroot/js/`, stripped the stray `"exclude"` block from
+      `presets.seed.json`
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -307,8 +311,13 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    any hash not in the `v1.` format fails verification rather than being read — there
    were no production hashes to preserve pre-release, so anyone with a password/recovery
    code set on an earlier build must re-set it (see Release Notes in PLAN.md).
-7. **Phantom platforms** — csproj targets android/ios/maccatalyst; `HostsFileService`
-   would throw on them. Trim to the Windows TFM.
+7. ~~**Phantom platforms**~~ — **RESOLVED.** `TargetFrameworks` trimmed to the single
+   `net9.0-windows10.0.19041.0`; the four non-Windows `Platforms/` folders (Android,
+   iOS, MacCatalyst, Tizen) are deleted, `Platforms/Windows/` kept (it holds
+   `app.manifest`, which carries the admin-elevation request the app needs to build
+   and run). The `[SupportedOSPlatform("windows")]` attributes on `HostsFileService`/
+   `BrowserPolicyService` stay — there was never a `CA1416` pragma to remove; that
+   PLAN.md wording was already inaccurate before this slice.
 8. ~~**No restore/unblock-all feature**~~ — **RESOLVED.** Settings has a "Restore / Unblock
    All" button (`IHostsFileService.RestoreAsync`, backed by the pure `HostsSection.Remove`).
    It removes the entire Nimbus-managed section from the hosts file — the pre-existing
@@ -342,9 +351,11 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
     project, compiles the three utility files directly, no MAUI/service dependency —
     runs on Windows or Linux). No behavior changed by the extraction. Other code paths
     (services, Razor components) remain untested — out of scope for Phase 0.
-11. Misc: `presets.seed.json` has a stray `"exclude"` block at the top; empty
-    `JsonLoad.cs`/`HostValidation.cs`; `rain.js` lives under `css/`; quote is per-launch
-    random, not per-day; stale personal-path comments in services.
+11. Misc — remaining items (rest resolved by slice 009: stray `presets.seed.json`
+    `"exclude"` block removed, empty `JsonLoad.cs` deleted, `rain.js` moved out of
+    `css/`): quote is per-launch random, not per-day; stale personal-path comments in
+    services (none currently found in `Services/` on inspection — re-check if this
+    persists).
 
 ## What's NOT Done (see PLAN.md for order and rationale)
 

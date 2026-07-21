@@ -58,8 +58,9 @@ the release: "blocks sites even with Secure DNS enabled."
 - [ ] **Pick the real name** (current name describes the mechanism, not the benefit).
       Quick trademark + domain search *before* release. Update `ApplicationTitle`,
       `ApplicationId` (`com.companyname.*` must go), window title, README.
-- [ ] Trim `TargetFrameworks` to Windows only; delete unused `Platforms/` folders;
-      remove the CA1416 pragma.
+- [x] Trim `TargetFrameworks` to Windows only; delete unused `Platforms/` folders;
+      remove the CA1416 pragma. *(There was never a CA1416 pragma — the
+      `[SupportedOSPlatform("windows")]` attributes are correct and were left in place.)*
 - [x] Drop `Microsoft.AspNetCore.Identity` + `Microsoft.AspNet.Identity.Core`; replace
       `PasswordHasher<T>` with `Rfc2898DeriveBytes.Pbkdf2` (keep verifying old-format
       hashes or just require re-setup — one-time decision, note it in release notes).
@@ -69,8 +70,9 @@ the release: "blocks sites even with Secure DNS enabled."
       *(`NormalizeHost` half already done — slice 005 pulled it forward so it could be
       unit tested; the seed-shape/log-message fixes also landed then. Remaining here:
       seed plumbing dedup + service interfaces.)*
-- [ ] Junk removal: stray `"exclude"` block in `presets.seed.json`, empty `JsonLoad.cs`,
-      move `rain.js` out of `css/`, delete tutorial comments and stale personal paths.
+- [ ] Junk removal: ~~stray `"exclude"` block in `presets.seed.json`, empty `JsonLoad.cs`,
+      move `rain.js` out of `css/`~~ done (slice 009); delete tutorial comments and
+      stale personal paths remains open.
 - [ ] Quote of the day = seeded by date (so it's actually daily); fix typos/inconsistent
       quoting in the quote list; AccountabilityFlow Q5 validates quote text only (not
       author line).
