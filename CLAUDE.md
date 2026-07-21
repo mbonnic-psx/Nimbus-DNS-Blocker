@@ -69,7 +69,7 @@ Nimbus-DNS-Blocker/
 │   ├── ICustomSitesService.cs
 │   ├── PasswordService.cs           # Modes, PBKDF2 hash, guardian code generation
 │   ├── IPasswordService.cs
-│   ├── QuoteService.cs              # Random quote per app launch (not truly daily)
+│   ├── QuoteService.cs              # Deterministic daily quote seeded by date (DONE)
 │   └── SnackbarService.cs           # Toast notifications (ISnackbarService)
 ├── Shared/
 │   └── SnackbarHost.razor           # Renders snackbar messages
@@ -77,7 +77,8 @@ Nimbus-DNS-Blocker/
 │   ├── AtomicFile.cs                # Crash-safe temp-file + File.Replace writes (DONE)
 │   ├── HostValidation.cs            # Shared NormalizeHost — used by both config services (DONE)
 │   ├── HostsSection.cs              # Pure hosts-block splice logic, extracted for testability (DONE)
-│   └── PasswordHash.cs              # PBKDF2 hash/verify, self-describing v1 string (DONE)
+│   ├── PasswordHash.cs              # PBKDF2 hash/verify, self-describing v1 string (DONE)
+│   └── QuoteText.cs                 # Date→index pick + trim/lowercase comparison (DONE)
 ├── Resources/Raw/
 │   ├── presets.seed.json            # Default categories (ships with app)
 │   └── custom.seed.json             # Default custom sites
@@ -87,8 +88,8 @@ Nimbus-DNS-Blocker/
 │   └── index.html
 ├── Platforms/Windows/                # Windows MAUI head (app.manifest carries the admin-elevation request)
 ├── Nimbus.Tests/                    # Plain net9.0 xUnit project — compiles Utilities/*.cs directly
-│                                     # (HostValidation, HostsSection, PasswordHash), no MAUI
-│                                     # dependency, runs on Windows or Linux (DONE)
+│                                     # (HostValidation, HostsSection, PasswordHash, QuoteText),
+│                                     # no MAUI dependency, runs on Windows or Linux (DONE)
 ├── MauiProgram.cs                   # Entry point + DI registrations
 └── App.xaml.cs
 ```
@@ -206,8 +207,9 @@ Two mutually exclusive modes, stored in MAUI Preferences (`PasswordService`):
 
 - **Accountability mode** — no password. Applying rules opens `UnlockModal`, which routes
   to `AccountabilityFlow`: 5 questions with a 3-second delay each; answering "urge" (Q3)
-  or "no" (Q4) intentionally cancels the flow; Q5 requires typing the daily quote (paste
-  blocked via JS interop).
+  or "no" (Q4) intentionally cancels the flow; Q5 requires typing the daily quote's
+  **text only** (author excluded — `QuoteService.CurrentQuoteText`, date-seeded via
+  `Utilities/QuoteText.IndexForDate`, same quote all day), paste blocked via JS interop.
 - **Guardian mode** — password (PBKDF2 hash in Preferences) gates Apply. "Forgot password"
   routes to `GuardianFlow`.
 
@@ -274,6 +276,11 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       plumbing (`GetLivePath`, `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) pulled into
       abstract `Services/SeedBackedConfigService.cs`; both services now sit behind
       `IPresetService`/`ICustomSitesService`, registered and injected everywhere by interface
+- [x] Daily date-seeded quote + text-only Q5 — `QuoteService` picks a quote deterministically
+      by local date (`Utilities/QuoteText.IndexForDate`, tested in `Nimbus.Tests/`) instead of
+      randomly per launch; quotes are structured `Quote(Text, Author)` records (fixes the
+      inconsistent formatting/typos in the old fused strings); AccountabilityFlow Q5 shows and
+      validates `CurrentQuoteText` (quote text only, no author)
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -353,18 +360,27 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    (`[SupportedOSPlatform("windows")]`), same as `HostsFileService`.
 10. ~~**No tests**~~ — **RESOLVED for the pure functions.** `SpliceSection` (now
     `Utilities/HostsSection.Splice`), `NormalizeHost` (now
-    `Utilities/HostValidation.NormalizeHost`), and `PasswordHash.Hash`/`Verify` were
-    extracted into `Utilities/` — all were previously `private`/MAUI-bound (or, for
-    `PasswordHash`, wrapped a MAUI-adjacent Identity type), so a plain test project
-    couldn't reach them otherwise. Covered by `Nimbus.Tests/` (plain `net9.0` xUnit
-    project, compiles the three utility files directly, no MAUI/service dependency —
-    runs on Windows or Linux). No behavior changed by the extraction. Other code paths
-    (services, Razor components) remain untested — out of scope for Phase 0.
-11. Misc — remaining items (rest resolved by slice 009: stray `presets.seed.json`
-    `"exclude"` block removed, empty `JsonLoad.cs` deleted, `rain.js` moved out of
-    `css/`): quote is per-launch random, not per-day; stale personal-path comments in
-    services (none currently found in `Services/` on inspection — re-check if this
-    persists).
+    `Utilities/HostValidation.NormalizeHost`), `PasswordHash.Hash`/`Verify`, and
+    `QuoteText.IndexForDate`/`Normalize` were extracted into `Utilities/` — all were
+    previously `private`/MAUI-bound (or, for `PasswordHash`, wrapped a MAUI-adjacent
+    Identity type; for the quote pick, fused into `QuoteService`'s per-launch `Random`
+    call), so a plain test project couldn't reach them otherwise. Covered by
+    `Nimbus.Tests/` (plain `net9.0` xUnit project, compiles the four utility files
+    directly, no MAUI/service dependency — runs on Windows or Linux). No behavior
+    changed by the `HostsSection`/`HostValidation`/`PasswordHash` extractions; the quote
+    pick itself changed behavior (per-launch random → daily deterministic), see #11.
+    Other code paths (services, Razor components) remain untested — out of scope for
+    Phase 0.
+11. ~~**Misc**~~ — **RESOLVED.** Slice 009 removed the stray `presets.seed.json`
+    `"exclude"` block, deleted the empty `JsonLoad.cs`, and moved `rain.js` out of
+    `css/`. Slice 011 closed the rest: the quote is now date-seeded (`QuoteText.IndexForDate`)
+    instead of per-launch random, the quote list's inconsistent formatting and typos are
+    fixed (structured `Quote(Text, Author)` records instead of fused/escaped strings), and
+    AccountabilityFlow Q5 validates the quote **text** only (see Password Protection
+    section below) instead of text+author. Stale personal-path comments: none found in
+    `Services/` on inspection (slice 009 already confirmed this); the broader
+    tutorial-comment sweep across unrelated files was explicitly out of scope for both
+    slices and remains open only as a general style item, not a tracked bug.
 
 ## What's NOT Done (see PLAN.md for order and rationale)
 

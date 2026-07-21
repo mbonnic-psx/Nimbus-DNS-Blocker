@@ -1,4 +1,5 @@
 @implements IDisposable
+@using Nimbus_Internet_Blocker.Utilities
 @inject QuoteService QuoteService
 @inject IJSRuntime JS
 
@@ -27,7 +28,7 @@
         @if (_currentIndex == _questions.Count - 1)
         {
             <div class="af-quote-box">
-                <div class="af-quote-text">@QuoteService.CurrentQuote</div>
+                <div class="af-quote-text">@QuoteService.CurrentQuoteText</div>
             </div>
         }
 
@@ -124,7 +125,7 @@
      * Questions are fixed at component definition time.
      * Q3 (index 2): "urge" is a valid answer but triggers OnCancelled — see OnNextClickedAsync.
      * Q4 (index 3): "no"   is a valid answer but triggers OnCancelled — see OnNextClickedAsync.
-     * Q5 (index 4): validated dynamically against QuoteService.CurrentQuote (stripped of quotes).
+     * Q5 (index 4): validated dynamically against QuoteService.CurrentQuoteText (text only, no author).
      */
     private readonly IReadOnlyList<(string Question, string[] Accepted)> _questions =
     [
@@ -208,7 +209,7 @@
     {
         if (!_nextEnabled) return;
 
-        var normalized    = _typedAnswer.Trim().ToLowerInvariant();
+        var normalized    = QuoteText.Normalize(_typedAnswer);
         bool isLastQuestion = _currentIndex == _questions.Count - 1;
 
         // ── Validate ───────────────────────────────────────────────────────────
@@ -275,20 +276,12 @@
      */
     private string GetHint()
         => _currentIndex == _questions.Count - 1
-            ? "Type the full quote above to continue"
+            ? "Type the quote above exactly (no author) to continue"
             : string.Join(" · ", _questions[_currentIndex].Accepted);
 
-    /*
-     * GetNormalizedQuote()
-     * Strips the typographic quotation marks that wrap each quote in QuoteService
-     * before comparing, so the user only needs to type the plain text content.
-     * Both the stored quote and the typed answer are trimmed and lowercased.
-     */
+    // Q5 accepts the quote TEXT only (no author) — see slice 011.
     private string GetNormalizedQuote()
-        => QuoteService.CurrentQuote
-            .Replace("\"", "")
-            .Trim()
-            .ToLowerInvariant();
+        => QuoteText.Normalize(QuoteService.CurrentQuoteText);
 
     // ── Cleanup ────────────────────────────────────────────────────────────────
 

@@ -74,9 +74,13 @@ the release: "blocks sites even with Secure DNS enabled."
 - [ ] Junk removal: ~~stray `"exclude"` block in `presets.seed.json`, empty `JsonLoad.cs`,
       move `rain.js` out of `css/`~~ done (slice 009); delete tutorial comments and
       stale personal paths remains open.
-- [ ] Quote of the day = seeded by date (so it's actually daily); fix typos/inconsistent
+- [x] Quote of the day = seeded by date (so it's actually daily); fix typos/inconsistent
       quoting in the quote list; AccountabilityFlow Q5 validates quote text only (not
       author line).
+      *(Slice 011: `QuoteService` picks deterministically via
+      `Utilities/QuoteText.IndexForDate` (tested); quotes restructured to
+      `Quote(Text, Author)` records, fixing the fused/escaped-string typos and
+      inconsistent shape; Q5 shows and validates `CurrentQuoteText` only.)*
 
 ### Phase 3 — Release (~1 week)
 
