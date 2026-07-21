@@ -62,8 +62,11 @@ Nimbus-DNS-Blocker/
 │   ├── IHostsFileService.cs
 │   ├── BrowserPolicyService.cs      # HKLM Secure-DNS-off policies (Chrome/Edge/Firefox) (DONE)
 │   ├── IBrowserPolicyService.cs
-│   ├── PresetService.cs             # Category blocklist load/save/normalize (no interface yet)
-│   ├── CustomSitesService.cs        # Custom sites CRUD (no interface yet)
+│   ├── SeedBackedConfigService.cs   # Shared seed/live-file plumbing base class (DONE)
+│   ├── PresetService.cs             # Category blocklist load/save/normalize (DONE)
+│   ├── IPresetService.cs
+│   ├── CustomSitesService.cs        # Custom sites CRUD (DONE)
+│   ├── ICustomSitesService.cs
 │   ├── PasswordService.cs           # Modes, PBKDF2 hash, guardian code generation
 │   ├── IPasswordService.cs
 │   ├── QuoteService.cs              # Random quote per app launch (not truly daily)
@@ -100,7 +103,6 @@ Nimbus-DNS-Blocker/
 - Services are registered as **Singletons** in `MauiProgram.cs`.
 - Always inject via constructor or `@inject` — never `new` a service directly.
 - Create an interface for any service that touches the file system or OS (testability).
-  `PresetService` and `CustomSitesService` currently violate this — fix when touched.
 
 ### Async/Await
 - All file I/O and any potentially slow operation must be `async Task` — no `.Result`
@@ -225,8 +227,8 @@ verifiable code.
 ```csharp
 builder.Services.AddSingleton<ISnackbarService, SnackbarService>();
 builder.Services.AddSingleton<QuoteService>();
-builder.Services.AddSingleton<PresetService>();
-builder.Services.AddSingleton<CustomSitesService>();
+builder.Services.AddSingleton<IPresetService, PresetService>();
+builder.Services.AddSingleton<ICustomSitesService, CustomSitesService>();
 builder.Services.AddSingleton<IBrowserPolicyService, BrowserPolicyService>();  // Windows-only, CA1416 suppressed
 builder.Services.AddSingleton<IHostsFileService, HostsFileService>();  // Windows-only, CA1416 suppressed
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
@@ -268,6 +270,10 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       folders are gone; removed empty `Models/JsonLoad.cs`, moved `rain.js` out of
       `css/` into `wwwroot/js/`, stripped the stray `"exclude"` block from
       `presets.seed.json`
+- [x] `PresetService`/`CustomSitesService` deduped and interfaced — shared seed/live-file
+      plumbing (`GetLivePath`, `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) pulled into
+      abstract `Services/SeedBackedConfigService.cs`; both services now sit behind
+      `IPresetService`/`ICustomSitesService`, registered and injected everywhere by interface
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 
@@ -295,15 +301,18 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
    snackbar rather than saving over the damaged file. `SaveAsync` on both services returns
    `bool` and writes atomically via `Utilities/AtomicFile.cs` (temp file + `File.Replace`),
    so a failed write never truncates the live file, and callers surface save failures.
-5. **~120 lines duplicated** between `PresetService` and `CustomSitesService` — the
-   `NormalizeHost` half is now resolved: both services call the shared
-   `Utilities/HostValidation.NormalizeHost` instead of keeping private copies (pulled
-   forward from Phase 2 by slice 005, since it needed to be testable outside MAUI). The
-   copy-paste artifacts are also fixed: `CustomSitesService`'s fallback seed shape is now
-   `{"sites":[]}` (was wrongly `{"categories":{}}`), and its `LoadAsync`/`SaveAsync` debug
-   log messages now name `CustomSitesService` instead of `PresetService`. Remaining dedup
-   (seed plumbing — `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) is still open for
-   Phase 2.
+5. ~~**~120 lines duplicated**~~ — **RESOLVED.** The `NormalizeHost` half was fixed first:
+   both services call the shared `Utilities/HostValidation.NormalizeHost` instead of
+   keeping private copies (pulled forward from Phase 2 by slice 005, since it needed to be
+   testable outside MAUI). The copy-paste artifacts were fixed alongside it:
+   `CustomSitesService`'s fallback seed shape is `{"sites":[]}` (was wrongly
+   `{"categories":{}}`), and its `LoadAsync`/`SaveAsync` debug log messages name
+   `CustomSitesService` instead of `PresetService`. The remaining seed-plumbing dedup
+   (`GetLivePath`, `EnsureLiveFileExistsAsync`, `ReadSeedTextAsync`) is closed by slice
+   010's abstract `Services/SeedBackedConfigService.cs` base class, which both services
+   now derive from; `PresetService`/`CustomSitesService` also sit behind
+   `IPresetService`/`ICustomSitesService` now, satisfying the Service Layer Pattern rule.
+   Nothing left open in this item.
 6. ~~**Wrong packages**~~ — **RESOLVED.** `Microsoft.AspNetCore.Identity` 2.3.9 (EOL) and
    `Microsoft.AspNet.Identity.Core` 2.2.4 (legacy) are both removed from the csproj.
    `PasswordHasher<T>` is replaced by `Utilities/PasswordHash` (PBKDF2-HMAC-SHA256,

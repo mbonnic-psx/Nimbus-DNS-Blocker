@@ -18,14 +18,14 @@ public sealed class HostsFileService : IHostsFileService
     private const string BackupPath    = @"C:\Windows\System32\drivers\etc\hosts.nimbus.bak";
 
     // ── Dependencies ───────────────────────────────────────────────────────────
-    private readonly PresetService         _presetService;
-    private readonly CustomSitesService    _customSitesService;
+    private readonly IPresetService        _presetService;
+    private readonly ICustomSitesService   _customSitesService;
     private readonly ISnackbarService      _snackbar;
     private readonly IBrowserPolicyService _browserPolicy;
 
     public HostsFileService(
-        PresetService         presetService,
-        CustomSitesService    customSitesService,
+        IPresetService        presetService,
+        ICustomSitesService   customSitesService,
         ISnackbarService      snackbar,
         IBrowserPolicyService browserPolicy)
     {

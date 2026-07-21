@@ -64,12 +64,13 @@ the release: "blocks sites even with Secure DNS enabled."
 - [x] Drop `Microsoft.AspNetCore.Identity` + `Microsoft.AspNet.Identity.Core`; replace
       `PasswordHasher<T>` with `Rfc2898DeriveBytes.Pbkdf2` (keep verifying old-format
       hashes or just require re-setup — one-time decision, note it in release notes).
-- [ ] Deduplicate `PresetService`/`CustomSitesService` shared logic into
+- [x] Deduplicate `PresetService`/`CustomSitesService` shared logic into
       `Utilities/HostValidation.cs`; fix the wrong fallback seed shape and wrong-service
       log messages; add interfaces for both services.
-      *(`NormalizeHost` half already done — slice 005 pulled it forward so it could be
-      unit tested; the seed-shape/log-message fixes also landed then. Remaining here:
-      seed plumbing dedup + service interfaces.)*
+      *(`NormalizeHost` half + seed-shape/log-message fixes landed in slice 005. Slice 010
+      closed the rest: seed plumbing — `GetLivePath`, `EnsureLiveFileExistsAsync`,
+      `ReadSeedTextAsync` — moved into abstract `Services/SeedBackedConfigService.cs`;
+      both services now implement `IPresetService`/`ICustomSitesService`.)*
 - [ ] Junk removal: ~~stray `"exclude"` block in `presets.seed.json`, empty `JsonLoad.cs`,
       move `rain.js` out of `css/`~~ done (slice 009); delete tutorial comments and
       stale personal paths remains open.

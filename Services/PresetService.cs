@@ -1,4 +1,4 @@
-﻿using Nimbus_Internet_Blocker.Models;
+using Nimbus_Internet_Blocker.Models;
 using Nimbus_Internet_Blocker.Utilities;
 using System;
 using System.Collections.Generic;
@@ -9,57 +9,12 @@ using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Nimbus_Internet_Blocker.Services
-{ 
-    public class PresetService
+{
+    public class PresetService : SeedBackedConfigService, IPresetService
     {
-        /*
-         * declaring each JSON file to the variable name
-         * "seed" = the starter file we ship with the app
-         * "live" = the file that gets edited the one that get stored in AppData
-         */
-        public const string liveFileName = "presets.json";
-        public const string seedFileName = "presets.seed.json";  
-
-        public string GetLivePath()
-        {
-            /*
-             * Links the path of AppData and presets.json
-             * (AppDataDirectory + "/" + filename)
-             */
-            return Path.Combine(FileSystem.AppDataDirectory, liveFileName);
-        }
-
-        /*
-         * Task<T> = this work will finish later and produce a T or promise a string later in this case
-         * async = this means in this method I am going to await
-         * await means pause this method here and let the app keep running and then continue when the Task finishes
-         */
-        public async Task<string> EnsureLiveFileExistsAsync()
-        {
-                string livePath = GetLivePath(); // Get the json file path in the AppData folder
-
-                if (File.Exists(livePath))
-                {
-                    return livePath; // If the file already exists return the path
-                }
-
-            string seedJson = await ReadSeedTextAsync(seedFileName); // Read the seed Json file from the packaged app assets if there is not one in AppData
-             
-            if (string.IsNullOrWhiteSpace(seedJson)) 
-            {
-                seedJson = "{ \"categories\": {} }"; // If the file could not be read default to an empty preset file
-            }
-            
-            var folder  = Path.GetDirectoryName(livePath); 
-            if (!string.IsNullOrEmpty(folder))
-            {
-                Directory.CreateDirectory(folder); // Make sure the folder exists already
-            }
-
-            await File.WriteAllTextAsync(livePath, seedJson); // Create prsets.json in AppData using the seed content
-
-                return livePath;
-        }
+        protected override string LiveFileName      => "presets.json";
+        protected override string SeedFileName      => "presets.seed.json";
+        protected override string EmptyFallbackJson => "{ \"categories\": {} }";
 
         /// <summary>
         /// Loads the live presets file. Returns <see langword="null"/> when the file
@@ -151,20 +106,5 @@ namespace Nimbus_Internet_Blocker.Services
                     .ToList();
             }
         }
-
-        private async Task<string> ReadSeedTextAsync(string seedFileName)
-        {
-            //string seedPath = Path.Combine(FileSystem.AppDataDirectory, seedFileName);
-            //return await File.ReadAllTextAsync(seedPath);
-
-            /*
-             * Put presets.seed.json into Resources/Raw/ 
-             * This will read it from the app package
-             */
-            using var stream = await FileSystem.OpenAppPackageFileAsync(seedFileName);
-            using var reader = new StreamReader(stream);
-            return await reader.ReadToEndAsync();
-        }
-
     }
 }
