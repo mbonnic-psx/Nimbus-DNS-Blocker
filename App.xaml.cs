@@ -1,25 +1,17 @@
-﻿namespace Nimbus_Internet_Blocker
+﻿using Nimbus_Internet_Blocker.Services;
+
+namespace Nimbus_Internet_Blocker
 {
     public partial class App : Application
     {
-        public App()
+        public App(IPasswordService passwordService)
         {
             InitializeComponent();
 
-            // TEMP DEV RESET — clears forgotten password/recovery protection state.
-            // Runs once on launch via the same Preferences store the app uses, so it
-            // works regardless of where MAUI persists it. REMOVE after a single run.
-            foreach (var key in new[]
-            {
-                "nimbus_password_hash",
-                "nimbus_password_enabled",
-                "nimbus_accountability_active",
-                "nimbus_recovery_mode",
-                "nimbus_guardian_recovery_hash",
-            })
-            {
-                Microsoft.Maui.Storage.Preferences.Default.Remove(key);
-            }
+            // Developer safety net: if reset-on-launch is armed (Settings, DEBUG only)
+            // clear all protection state now so testing can't lock you out. No-op in
+            // Release and whenever the switch is off.
+            passwordService.RunDebugWipeIfEnabled();
         }
 
         protected override Window CreateWindow(IActivationState? activationState)

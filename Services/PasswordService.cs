@@ -28,6 +28,12 @@ namespace Nimbus_Internet_Blocker.Services
         private const string PREF_RECOVERY       = "nimbus_recovery_mode";
         private const string PREF_RECOVERY_HASH  = "nimbus_guardian_recovery_hash";
 
+        // Developer reset-on-launch (DEBUG only — see the region at the bottom).
+        private const string PREF_DEBUG_WIPE = "nimbus_debug_wipe_on_launch";
+        // Hardcoded on purpose: a developer safety net compiled out of Release
+        // builds, never a user credential and never a shipping bypass path.
+        private const string DEBUG_WIPE_PASSWORD = "!!De-buggin8902";
+
         // ── Mode State ─────────────────────────────────────────────────────────
 
         /*
@@ -175,12 +181,23 @@ namespace Nimbus_Internet_Blocker.Services
          */
         public Task ClearPasswordAsync()
         {
+            ClearProtectionState();
+            return Task.CompletedTask;
+        }
+
+        /*
+         * ClearProtectionState()
+         * The actual wipe shared by ClearPasswordAsync and the debug reset-on-launch.
+         * Deliberately does NOT touch PREF_DEBUG_WIPE, so an armed reset survives to
+         * fire again on the next launch.
+         */
+        private void ClearProtectionState()
+        {
             Preferences.Remove(PREF_HASH);
             Preferences.Set(PREF_ENABLED, false);
             Preferences.Set(PREF_ACCOUNTABILITY, false);
             Preferences.Remove(PREF_RECOVERY);
             Preferences.Remove(PREF_RECOVERY_HASH);
-            return Task.CompletedTask;
         }
 
         // ── Guardian Hash Generation ───────────────────────────────────────────
@@ -229,6 +246,44 @@ namespace Nimbus_Internet_Blocker.Services
             }
 
             return string.Join("-", segments);
+        }
+
+        // ── Developer Reset-On-Launch (DEBUG builds only) ──────────────────────
+        // The bodies are #if DEBUG so the whole mechanism — including the ability to
+        // arm it or act on a stale armed flag — vanishes in Release. A "wipe all
+        // protection on launch" switch would be a bypass hole if it ever shipped.
+
+        public bool DebugWipeOnLaunch =>
+#if DEBUG
+            Preferences.Get(PREF_DEBUG_WIPE, false);
+#else
+            false;
+#endif
+
+        public bool TrySetDebugWipeOnLaunch(bool enabled, string password)
+        {
+#if DEBUG
+            if (enabled)
+            {
+                if (password != DEBUG_WIPE_PASSWORD) return false;
+                Preferences.Set(PREF_DEBUG_WIPE, true);
+                return true;
+            }
+
+            Preferences.Set(PREF_DEBUG_WIPE, false);
+            return true;
+#else
+            _ = enabled; _ = password;
+            return false;
+#endif
+        }
+
+        public void RunDebugWipeIfEnabled()
+        {
+#if DEBUG
+            if (!Preferences.Get(PREF_DEBUG_WIPE, false)) return;
+            ClearProtectionState();
+#endif
         }
     }
 }

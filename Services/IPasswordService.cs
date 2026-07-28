@@ -105,5 +105,34 @@ namespace Nimbus_Internet_Blocker.Services
          * so a typed code can be verified later via VerifyRecoveryCode.
          */
         string GenerateGuardianHash();
+
+        // ── Developer Reset-On-Launch (DEBUG builds only) ──────────────────────
+        /*
+         * A testing safety net so a developer can't lock themselves out while
+         * exercising the protection flows. Entirely compiled out of Release builds
+         * (the implementation no-ops there), so it is never a shipping bypass path.
+         */
+
+        /*
+         * DebugWipeOnLaunch
+         * True when reset-on-launch is armed. Always false in Release builds.
+         */
+        bool DebugWipeOnLaunch { get; }
+
+        /*
+         * TrySetDebugWipeOnLaunch()
+         * Arms (enabled=true) or disarms (enabled=false) reset-on-launch. Arming
+         * requires the developer password; disarming does not. Returns false if the
+         * password is wrong, or always in Release builds.
+         */
+        bool TrySetDebugWipeOnLaunch(bool enabled, string password);
+
+        /*
+         * RunDebugWipeIfEnabled()
+         * Called once at startup: if reset-on-launch is armed, clears all protection
+         * state (same effect as ClearPasswordAsync) but leaves the arming flag set, so
+         * it keeps clearing every launch until disarmed. No-op in Release builds.
+         */
+        void RunDebugWipeIfEnabled();
     }
 }

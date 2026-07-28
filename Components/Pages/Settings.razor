@@ -221,6 +221,40 @@
 
     </div>
 
+    <!-- ── Developer: Reset On Launch (DEBUG builds only) ───────────────────── -->
+    @if (_debugFeatureAvailable)
+    {
+        <div class="card card-pad">
+            <h2 class="pw-heading">Developer — Reset On Launch</h2>
+            <p class="subhead">
+                Debug builds only. While on, every launch clears all protection state
+                (password, recovery code, accountability mode) so you can't lock yourself
+                out while testing — the switch itself stays on until you turn it off.
+                While off, protection persists normally. Enabling requires the developer
+                password.
+            </p>
+
+            <div class="pw-field-group">
+                <input class="input"
+                       type="password"
+                       placeholder="Developer password (required to enable)"
+                       autocomplete="off"
+                       @bind="_debugPassword"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="category-row">
+                <div class="category-name">Wipe protection state on every launch</div>
+                <label class="switch" title="Wipe protection state on every launch">
+                    <input type="checkbox"
+                           checked="@_debugWipeEnabled"
+                           @onchange="OnDebugWipeToggleChanged" />
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    }
+
     <UnlockModal IsVisible="_showUnlockModal"
                  OnUnlocked="OnUnlockedAsync"
                  OnCancelled="OnModalCancelled" />
@@ -254,6 +288,18 @@
 
     private bool _dohPoliciesEnabled;
 
+    // ── Developer reset-on-launch (DEBUG only) ──────────────────────────────────
+    // _debugFeatureAvailable is compile-time constant so the whole card is absent
+    // from Release builds; the service methods are no-ops there anyway.
+    private readonly bool _debugFeatureAvailable =
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+    private bool _debugWipeEnabled;
+    private string _debugPassword = "";
+
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     protected override void OnInitialized()
@@ -261,6 +307,48 @@
         _passwordEnabled      = PasswordService.IsPasswordEnabled();
         _accountabilityActive = PasswordService.IsAccountabilityModeActive();
         _dohPoliciesEnabled   = BrowserPolicyService.IsEnabled;
+        _debugWipeEnabled     = PasswordService.DebugWipeOnLaunch;
+    }
+
+    // ── Developer reset-on-launch ───────────────────────────────────────────────
+
+    /*
+     * OnDebugWipeToggleChanged()
+     * Arming requires the developer password (revert the switch and warn on a wrong
+     * one); disarming is free. When armed, App startup clears all protection state
+     * every launch until this is turned off — a testing lockout safety net.
+     */
+    private void OnDebugWipeToggleChanged(ChangeEventArgs e)
+    {
+        bool wantEnabled = e.Value is bool b
+            ? b
+            : e.Value is string s && bool.TryParse(s, out var parsed) && parsed;
+
+        if (wantEnabled)
+        {
+            if (PasswordService.TrySetDebugWipeOnLaunch(true, _debugPassword))
+            {
+                _debugWipeEnabled = true;
+                _debugPassword    = "";
+                Snackbar.Warn("Reset-on-launch ON",
+                    "All protection state will be cleared on every launch until you turn this off.");
+            }
+            else
+            {
+                _debugWipeEnabled = false;   // revert the switch
+                Snackbar.Error("Incorrect developer password",
+                    "Enter the developer password to enable reset-on-launch.");
+            }
+        }
+        else
+        {
+            PasswordService.TrySetDebugWipeOnLaunch(false, _debugPassword);
+            _debugWipeEnabled = false;
+            Snackbar.Info("Reset-on-launch OFF",
+                "Protection state will now persist between launches.");
+        }
+
+        StateHasChanged();
     }
 
     // ── Mode Selection ─────────────────────────────────────────────────────────
