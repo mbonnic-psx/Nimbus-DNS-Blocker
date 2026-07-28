@@ -281,6 +281,14 @@ builder.Services.AddSingleton<IPasswordService, PasswordService>();
       randomly per launch; quotes are structured `Quote(Text, Author)` records (fixes the
       inconsistent formatting/typos in the old fused strings); AccountabilityFlow Q5 shows and
       validates `CurrentQuoteText` (quote text only, no author)
+- [x] Force admin at launch — `Platforms/Windows/app.manifest` now requests
+      `requireAdministrator` via a `trustInfo`/`requestedExecutionLevel` block, so Windows
+      shows the UAC prompt before the process starts (decline = app never opens; accept =
+      runs elevated). Previously the manifest had no elevation request at all despite this
+      file's structure note claiming it did — the app ran un-elevated and only
+      `HostsFileService.IsElevated`-checked at Apply time. Valid only because the app is
+      unpackaged (`WindowsPackageType=None`). See PLAN.md Phase 2.5; the hosts-file ACL
+      lock in that phase is still open.
 
 ## Known Bugs / Tech Debt (verified against code — fix these before new features)
 

@@ -82,6 +82,32 @@ the release: "blocks sites even with Secure DNS enabled."
       `Quote(Text, Author)` records, fixing the fused/escaped-string typos and
       inconsistent shape; Q5 shows and validates `CurrentQuoteText` only.)*
 
+### Phase 2.5 — Launch elevation & tamper-friction (Track 1 hardening)
+
+Lighter, UI-side precursors to the Track 2 service (Phase 5). They raise the bypass
+bar past *casual* tampering without a background service — still "friction, not
+enforcement": the same Administrator who runs the app can always undo them, so this
+does not contradict the positioning (we don't claim tamper-proof toughness).
+
+- [x] **Force admin at launch** — `Platforms/Windows/app.manifest` now requests
+      `requireAdministrator`, so Windows shows the UAC consent prompt *before* the
+      process starts: decline → the app never opens; accept → it runs elevated (which
+      the hosts write and DoH policies already require). Only valid because the app is
+      unpackaged (`WindowsPackageType=None`) — MSIX-packaged apps can't force
+      elevation this way. Replaces the previous behavior (ran un-elevated, only
+      `HostsFileService.IsElevated`-checked at Apply time). Dev note: debugging now
+      needs Visual Studio / `dotnet run` launched elevated.
+- [ ] **ACL-lock the hosts file** — on Apply, tighten the hosts-file DACL so
+      interactive Users/Administrators lose *write* (a Notepad save → Access Denied);
+      the elevated app unlocks → writes (wrapping the existing `AtomicFile` temp-write
+      + `File.Replace`) → re-locks. **Critical gotcha:** preserve *read* for `SYSTEM`
+      and `NT AUTHORITY\NetworkService`, or the DNS Client service (Dnscache) can't
+      read hosts and the blocking itself breaks. `RestoreAsync` / uninstall **must**
+      restore a sane default DACL (otherwise the user is left needing `takeown` to
+      edit their own hosts file). Gate behind a Settings toggle, same pattern as the
+      DoH policy. Honest limit: an admin can `takeown` / Safe-Mode around it — real
+      enforcement is Phase 5's LocalSystem service + `FileSystemWatcher` re-write.
+
 ### Phase 3 — Release (~1 week)
 
 - [ ] Release build + installer or zip; test on a clean Windows VM (no dev tools).
