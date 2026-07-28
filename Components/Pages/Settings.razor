@@ -252,6 +252,28 @@
                     <span class="slider"></span>
                 </label>
             </div>
+
+            <hr class="pw-divider" />
+
+            <h3 class="pw-subheading">Reset Blocklists To Seed Defaults</h3>
+            <p class="subhead">
+                Deletes the live config files and re-copies the packaged
+                <code>*.seed.json</code>, so seed edits actually show up (the seed is
+                otherwise only copied on first run). Discards all category toggles and
+                custom sites. Rebuild first so the latest seed is bundled; reopen the
+                Blocking page afterward. If blocking is currently applied, run
+                Restore / Unblock All or Apply to re-sync the hosts file.
+            </p>
+            <p class="subhead">
+                Live config folder: <code>@_appDataPath</code>
+            </p>
+
+            <button class="btn btn-danger pw-action-btn"
+                    type="button"
+                    disabled="@_isResettingSeeds"
+                    @onclick="OnResetSeedsClicked">
+                @(_isResettingSeeds ? "Resetting…" : "Reset blocklists to seed defaults")
+            </button>
         </div>
     }
 
@@ -299,6 +321,8 @@
 #endif
     private bool _debugWipeEnabled;
     private string _debugPassword = "";
+    private string _appDataPath = "";
+    private bool _isResettingSeeds;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -308,6 +332,7 @@
         _accountabilityActive = PasswordService.IsAccountabilityModeActive();
         _dohPoliciesEnabled   = BrowserPolicyService.IsEnabled;
         _debugWipeEnabled     = PasswordService.DebugWipeOnLaunch;
+        _appDataPath          = Microsoft.Maui.Storage.FileSystem.AppDataDirectory;
     }
 
     // ── Developer reset-on-launch ───────────────────────────────────────────────
@@ -349,6 +374,38 @@
         }
 
         StateHasChanged();
+    }
+
+    /*
+     * OnResetSeedsClicked()
+     * Replaces the live presets/custom files with fresh copies of the packaged
+     * seed so seed edits become visible (the seed is otherwise only copied on
+     * first run). Discards toggles and custom sites — a testing convenience.
+     */
+    private async Task OnResetSeedsClicked()
+    {
+        if (_isResettingSeeds) return;
+
+        _isResettingSeeds = true;
+        StateHasChanged();
+
+        try
+        {
+            await PresetService.ResetToSeedDefaultsAsync();
+            await CustomSitesService.ResetToSeedDefaultsAsync();
+            Snackbar.Success("Blocklists reset",
+                "Live config replaced with the packaged seed defaults. " +
+                "Open the Blocking page to see them.");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Error("Reset failed", ex.Message);
+        }
+        finally
+        {
+            _isResettingSeeds = false;
+            StateHasChanged();
+        }
     }
 
     // ── Mode Selection ─────────────────────────────────────────────────────────

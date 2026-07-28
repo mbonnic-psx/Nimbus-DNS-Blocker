@@ -20,4 +20,10 @@ public interface IPresetService
     /// on failure; the previous file is left intact.
     /// </summary>
     Task<bool> SaveAsync(PresetsRoot root);
+
+    /// <summary>
+    /// Testing helper: replaces the live presets file with a fresh copy of the
+    /// packaged seed, discarding runtime edits. Returns the live file path.
+    /// </summary>
+    Task<string> ResetToSeedDefaultsAsync();
 }

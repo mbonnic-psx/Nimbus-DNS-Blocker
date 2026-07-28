@@ -32,4 +32,10 @@ public interface ICustomSitesService
     /// pending changes persist at apply time.
     /// </summary>
     (bool success, string message) RemoveSite(CustomsRoot root, string host);
+
+    /// <summary>
+    /// Testing helper: replaces the live custom-sites file with a fresh copy of the
+    /// packaged seed, discarding runtime edits. Returns the live file path.
+    /// </summary>
+    Task<string> ResetToSeedDefaultsAsync();
 }

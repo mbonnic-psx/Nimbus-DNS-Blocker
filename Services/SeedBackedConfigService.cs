@@ -46,6 +46,21 @@ public abstract class SeedBackedConfigService
         return livePath;
     }
 
+    /// <summary>
+    /// Testing helper: deletes the live file and re-copies the packaged seed,
+    /// discarding any runtime edits (toggles, custom sites). Exists because the
+    /// seed is only copied when no live file is present, so an updated seed is
+    /// otherwise invisible to an install that has already run. Returns the live path.
+    /// </summary>
+    public async Task<string> ResetToSeedDefaultsAsync()
+    {
+        string livePath = GetLivePath();
+        if (File.Exists(livePath))
+            File.Delete(livePath);
+
+        return await EnsureLiveFileExistsAsync();
+    }
+
     /// <summary>Reads the packaged seed file from the app package (Resources/Raw).</summary>
     protected async Task<string> ReadSeedTextAsync()
     {
